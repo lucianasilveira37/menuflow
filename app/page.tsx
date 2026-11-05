@@ -130,7 +130,7 @@ export default function Home() {
       </section>
 
       <footer className="border-t border-[#e5e9e3] px-6 py-6 text-center text-sm text-gray-500">
-        © {new Date().getFullYear()} MenuFlow. Todos os direitos reservados.
+        © 2026 MenuFlow. Todos os direitos reservados.
       </footer>
     </main>
   );
