@@ -1,7 +1,7 @@
 export const instant = false;
-import { notFound } from "next/navigation";
-import PublicMenu from "../../cardapio/[slug]/PublicMenu";
-import { supabase } from "../../lib/supabase";
+
+
+
 
 
 import { Suspense } from "react";
