@@ -1,3 +1,4 @@
+
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -53,12 +54,16 @@ export default function FinanceiroPage() {
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('other')
   const [amount, setAmount] = useState('')
- const [expenseDate, setExpenseDate] = useState('')
-
-useEffect(() => {
-  setExpenseDate(new Date().toLocaleDateString('en-CA'))
-}, [])
+  const [expenseDate, setExpenseDate] = useState('')
   const [notes, setNotes] = useState('')
+  const [currentMonth, setCurrentMonth] = useState('')
+
+  useEffect(() => {
+    const today = new Date().toLocaleDateString('en-CA')
+
+    setExpenseDate(today)
+    setCurrentMonth(today.slice(0, 7))
+  }, [])
 
   async function loadExpenses() {
     setLoading(true)
@@ -73,12 +78,13 @@ useEffect(() => {
         return
       }
 
-      const { data: membership, error: membershipError } = await supabase
-        .from('memberships')
-        .select('restaurant_id')
-        .eq('user_id', authData.user.id)
-        .limit(1)
-        .single()
+      const { data: membership, error: membershipError } =
+        await supabase
+          .from('memberships')
+          .select('restaurant_id')
+          .eq('user_id', authData.user.id)
+          .limit(1)
+          .single()
 
       if (membershipError || !membership) {
         setError('Não foi possível encontrar seu restaurante.')
@@ -87,22 +93,24 @@ useEffect(() => {
 
       setRestaurantId(membership.restaurant_id)
 
-      const { data: expensesData, error: expensesError } = await supabase
-        .from('restaurant_expenses')
-        .select('*')
-        .eq('restaurant_id', membership.restaurant_id)
-        .order('expense_date', { ascending: false })
+      const { data: expensesData, error: expensesError } =
+        await supabase
+          .from('restaurant_expenses')
+          .select('*')
+          .eq('restaurant_id', membership.restaurant_id)
+          .order('expense_date', { ascending: false })
 
       if (expensesError) {
         setError('Erro ao carregar despesas: ' + expensesError.message)
         return
       }
 
-      const { data: paidData, error: paidError } = await supabase
-        .from('orders')
-        .select('payment_amount, paid_at')
-        .eq('restaurant_id', membership.restaurant_id)
-        .eq('payment_status', 'paid')
+      const { data: paidData, error: paidError } =
+        await supabase
+          .from('orders')
+          .select('payment_amount, paid_at')
+          .eq('restaurant_id', membership.restaurant_id)
+          .eq('payment_status', 'paid')
 
       if (paidError) {
         setError('Erro ao carregar faturamento: ' + paidError.message)
@@ -143,6 +151,11 @@ useEffect(() => {
 
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
       setError('Informe um valor válido.')
+      return
+    }
+
+    if (!expenseDate) {
+      setError('Informe a data da despesa.')
       return
     }
 
@@ -226,11 +239,12 @@ useEffect(() => {
     0
   )
 
-  const currentMonth = new Date().toLocaleDateString('en-CA').slice(0, 7)
-
   const monthlyExpenses = expenses
     .filter(expense => expense.expense_date.startsWith(currentMonth))
-    .reduce((total, expense) => total + Number(expense.amount || 0), 0)
+    .reduce(
+      (total, expense) => total + Number(expense.amount || 0),
+      0
+    )
 
   const totalRevenue = paidOrders.reduce(
     (total, order) => total + Number(order.payment_amount || 0),
@@ -248,7 +262,6 @@ useEffect(() => {
 
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-800 md:flex">
-
       <aside className="w-full bg-[#111827] p-5 text-white md:min-h-screen md:w-64 md:shrink-0">
         <div className="mb-8">
           <h1 className="text-2xl font-extrabold">
@@ -282,7 +295,6 @@ useEffect(() => {
       </aside>
 
       <main className="min-w-0 flex-1 p-4 md:p-8">
-
         <header className="mb-8">
           <p className="text-sm text-slate-500">
             MenuFlow / Gerenciamento
@@ -308,11 +320,8 @@ useEffect(() => {
         )}
 
         <section className="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">
-              Faturamento recebido
-            </p>
+            <p className="text-sm text-slate-500">Faturamento recebido</p>
             <p className="mt-2 text-2xl font-extrabold text-emerald-700">
               {formatPrice(totalRevenue)}
             </p>
@@ -334,9 +343,7 @@ useEffect(() => {
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-slate-500">
-              Total de despesas
-            </p>
+            <p className="text-sm text-slate-500">Total de despesas</p>
             <p className="mt-2 text-2xl font-extrabold text-slate-900">
               {formatPrice(totalExpenses)}
             </p>
@@ -361,20 +368,22 @@ useEffect(() => {
             <p className="text-sm text-slate-500">
               Resultado estimado do mês
             </p>
-            <p className={`mt-2 text-2xl font-extrabold ${
-              monthlyResult >= 0 ? 'text-emerald-700' : 'text-red-600'
-            }`}>
+            <p
+              className={`mt-2 text-2xl font-extrabold ${
+                monthlyResult >= 0
+                  ? 'text-emerald-700'
+                  : 'text-red-600'
+              }`}
+            >
               {formatPrice(monthlyResult)}
             </p>
             <p className="mt-1 text-xs text-slate-400">
               Recebimentos menos despesas cadastradas
             </p>
           </div>
-
         </section>
 
         <section className="mb-7 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-
           <h3 className="text-lg font-bold text-slate-900">
             + Cadastrar nova despesa
           </h3>
@@ -384,7 +393,6 @@ useEffect(() => {
           </p>
 
           <form onSubmit={addExpense} className="grid gap-4 md:grid-cols-2">
-
             <div className="md:col-span-2">
               <label className="mb-1 block text-sm font-semibold">
                 Descrição
@@ -457,18 +465,16 @@ useEffect(() => {
             <div className="md:col-span-2">
               <button
                 type="submit"
-                disabled={saving || !restaurantId}
+                disabled={saving || !restaurantId || !expenseDate}
                 className="w-full rounded-xl bg-blue-600 px-5 py-3 font-bold text-white transition hover:bg-blue-700 disabled:opacity-50 md:w-auto"
               >
                 {saving ? 'Salvando...' : 'Cadastrar despesa'}
               </button>
             </div>
-
           </form>
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
-
           <div className="mb-5">
             <h3 className="text-lg font-bold text-slate-900">
               Histórico de despesas
@@ -549,13 +555,11 @@ useEffect(() => {
               </table>
             </div>
           )}
-
         </section>
 
         <footer className="mt-10 border-t border-slate-200 pt-5 text-xs text-slate-400">
           MenuFlow · Financeiro do restaurante
         </footer>
-
       </main>
     </div>
   )
