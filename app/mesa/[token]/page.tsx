@@ -1,17 +1,13 @@
 export const instant = false;
-
-import { Suspense } from "react";
-import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import PublicMenu from "../../cardapio/[slug]/PublicMenu";
 import { supabase } from "../../lib/supabase";
+
 type Props = {
   params: Promise<{ token: string }>;
 };
 
-async function MesaContent({ params }: Props) {
-  await connection();
-
+export default async function MesaPage({ params }: Props) {
   const { token } = await params;
 
   const { data, error } = await supabase.rpc(
@@ -37,19 +33,5 @@ async function MesaContent({ params }: Props) {
         tableToken={token}
       />
     </>
-  );
-}
-
-export default function MesaPage({ params }: Props) {
-  return (
-    <Suspense
-      fallback={
-        <div className="p-6 text-center">
-          Carregando mesa...
-        </div>
-      }
-    >
-      <MesaContent params={params} />
-    </Suspense>
   );
 }
