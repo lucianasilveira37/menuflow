@@ -19,6 +19,7 @@ type OrderTracking = {
   restaurant_id: string
   status: string
   order_type: 'delivery' | 'pickup' | 'table'
+  delivery_address: string | null
   delivery_neighborhood: string | null
   delivery_fee: number | string
   subtotal: number | string
@@ -446,19 +447,24 @@ function AcompanharPedidoContent() {
                 : '🍽️ Consumo no local'}
           </p>
 
-          {isDelivery && (
-            <>
-              <p style={{ marginTop: '8px' }}>
-                <strong>Bairro:</strong>{' '}
-                {order.delivery_neighborhood || 'Não informado'}
-              </p>
+         {isDelivery && (
+  <>
+    <p>
+      <strong>Endereço:</strong>{' '}
+      {order.delivery_address || 'Não informado'}
+    </p>
 
-              <p style={{ marginTop: '8px' }}>
-                <strong>Taxa de entrega:</strong>{' '}
-                {currency(order.delivery_fee)}
-              </p>
-            </>
-          )}
+    <p>
+      <strong>Bairro:</strong>{' '}
+      {order.delivery_neighborhood || 'Não informado'}
+    </p>
+
+    <p>
+      <strong>Taxa de entrega:</strong>{' '}
+      {currency(order.delivery_fee)}
+    </p>
+  </>
+)}
         </div>
 
         {/* Produtos já vinculados ao pedido */}
