@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { createSupabaseServer } from "../lib/supabase-server";
 
+export const instant = false;
+
 export default async function SuperAdminLayout({
   children,
 }: {
@@ -10,7 +12,6 @@ export default async function SuperAdminLayout({
 }) {
   const supabase = await createSupabaseServer();
 
-  // Verifica se existe um usuário autenticado
   const {
     data: { user },
     error,
@@ -20,7 +21,6 @@ export default async function SuperAdminLayout({
     redirect("/");
   }
 
-  // Verifica se o usuário está cadastrado como SuperAdmin
   const { data: admin, error: adminError } = await supabase
     .from("platform_admins")
     .select("user_id")
