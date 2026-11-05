@@ -14,6 +14,25 @@ type Plano = {
   is_active: boolean;
 };
 
+type Restaurante = {
+  id: string;
+  name: string;
+};
+
+type CobrancaAssinatura = {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  due_date: string | null;
+  paid_at: string | null;
+  created_at: string;
+  period_start: string | null;
+  period_end: string | null;
+  payment_method: string | null;
+  payment_reference: string | null;
+};
+
 type Assinatura = {
   id: string;
   restaurant_id: string;
@@ -32,25 +51,10 @@ type Assinatura = {
     monthly_price: number;
     annual_price: number;
   } | null;
-  subscription_invoices: {
-    id: string;
-    amount: number;
-    currency: string;
-    status: string;
-    due_date: string | null;
-    paid_at: string | null;
-    created_at: string;
-  }[];
+  subscription_invoices: CobrancaAssinatura[];
 };
 
-type Cobranca = {
-  id: string;
-  amount: number;
-  currency: string;
-  status: string;
-  due_date: string | null;
-  paid_at: string | null;
-  created_at: string;
+type Cobranca = CobrancaAssinatura & {
   subscription_id: string;
   restaurantName: string;
 };
@@ -68,6 +72,21 @@ function dataFormatada(data: string | null) {
   return new Date(data).toLocaleDateString("pt-BR", {
     timeZone: "America/Fortaleza",
   });
+}
+
+function dataHoje() {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Fortaleza",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const ano = partes.find((p) => p.type === "year")?.value;
+  const mes = partes.find((p) => p.type === "month")?.value;
+  const dia = partes.find((p) => p.type === "day")?.value;
+
+  return `${ano}-${mes}-${dia}`;
 }
 
 function statusLabel(status: string) {
@@ -108,10 +127,18 @@ function cicloLabel(ciclo: string | null) {
   return "Não definido";
 }
 
+function formaPagamentoLabel(forma: string | null) {
+  if (forma === "pix") return "PIX";
+  if (forma === "cash") return "Dinheiro";
+  if (forma === "card") return "Cartão";
+  return "Não informado";
+}
+
 export default function AssinaturasPage() {
   const [planos, setPlanos] = useState<Plano[]>([]);
   const [assinaturas, setAssinaturas] = useState<Assinatura[]>([]);
   const [cobrancas, setCobrancas] = useState<Cobranca[]>([]);
+  const [restaurantes, setRestaurantes] = useState<Restaurante[]>([]);
 
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState("Todas");
@@ -121,6 +148,23 @@ export default function AssinaturasPage() {
 
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
+  const [mensagem, setMensagem] = useState("");
+
+  // Nova assinatura
+  const [modalNova, setModalNova] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [novoRestaurante, setNovoRestaurante] = useState("");
+  const [novoPlano, setNovoPlano] = useState("");
+  const [novoCiclo, setNovoCiclo] = useState("monthly");
+  const [novaData, setNovaData] = useState(dataHoje());
+
+  // Confirmação de pagamento
+  const [modalPagamento, setModalPagamento] = useState(false);
+  const [cobrancaSelecionada, setCobrancaSelecionada] =
+    useState<Cobranca | null>(null);
+  const [formaPagamento, setFormaPagamento] = useState("pix");
+  const [referenciaPagamento, setReferenciaPagamento] = useState("");
+  const [confirmandoPagamento, setConfirmandoPagamento] = useState(false);
 
   const carregarDados = useCallback(async () => {
     setCarregando(true);
@@ -150,7 +194,11 @@ export default function AssinaturasPage() {
         );
       }
 
-      const [planosResult, assinaturasResult] = await Promise.all([
+      const [
+        planosResult,
+        assinaturasResult,
+        restaurantesResult,
+      ] = await Promise.all([
         supabase
           .from("subscription_plans")
           .select(
@@ -187,32 +235,51 @@ export default function AssinaturasPage() {
               status,
               due_date,
               paid_at,
-              created_at
+              created_at,
+              period_start,
+              period_end,
+              payment_method,
+              payment_reference
             )
           `)
           .order("created_at", { ascending: false }),
+
+        supabase
+          .from("restaurants")
+          .select("id, name")
+          .order("name"),
       ]);
 
       if (planosResult.error) throw planosResult.error;
       if (assinaturasResult.error) throw assinaturasResult.error;
+      if (restaurantesResult.error) throw restaurantesResult.error;
 
       const listaPlanos = (planosResult.data || []) as Plano[];
-      const listaAssinaturas = (assinaturasResult.data || []) as unknown as Assinatura[];
+
+      const listaAssinaturas = (
+        assinaturasResult.data || []
+      ) as unknown as Assinatura[];
 
       setPlanos(listaPlanos);
       setAssinaturas(listaAssinaturas);
+      setRestaurantes(
+        (restaurantesResult.data || []) as Restaurante[]
+      );
 
       const listaCobrancas: Cobranca[] = [];
 
       listaAssinaturas.forEach((assinatura) => {
-        (assinatura.subscription_invoices || []).forEach((cobranca) => {
-          listaCobrancas.push({
-            ...cobranca,
-            subscription_id: assinatura.id,
-            restaurantName:
-              assinatura.restaurants?.name || "Restaurante não identificado",
-          });
-        });
+        (assinatura.subscription_invoices || []).forEach(
+          (cobranca) => {
+            listaCobrancas.push({
+              ...cobranca,
+              subscription_id: assinatura.id,
+              restaurantName:
+                assinatura.restaurants?.name ||
+                "Restaurante não identificado",
+            });
+          }
+        );
       });
 
       listaCobrancas.sort(
@@ -238,6 +305,116 @@ export default function AssinaturasPage() {
   useEffect(() => {
     carregarDados();
   }, [carregarDados]);
+
+  const criarAssinatura = async () => {
+    if (!novoRestaurante || !novoPlano || !novaData) {
+      setErro("Preencha todos os campos da nova assinatura.");
+      return;
+    }
+
+    setSalvando(true);
+    setErro("");
+    setMensagem("");
+
+    try {
+      const { error } = await supabase.rpc(
+        "admin_create_subscription_with_invoice",
+        {
+          p_restaurant_id: novoRestaurante,
+          p_plan_id: novoPlano,
+          p_billing_cycle: novoCiclo,
+          p_start_date: novaData,
+        }
+      );
+
+      if (error) throw error;
+
+      setModalNova(false);
+      setNovoRestaurante("");
+      setNovoPlano("");
+      setNovoCiclo("monthly");
+      setNovaData(dataHoje());
+
+      setMensagem("Assinatura e primeira cobrança criadas com sucesso.");
+
+      await carregarDados();
+    } catch (error: unknown) {
+      console.error("Erro ao criar assinatura:", error);
+
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível criar a assinatura."
+      );
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  const abrirConfirmacao = (cobranca: Cobranca) => {
+    setErro("");
+    setMensagem("");
+    setCobrancaSelecionada(cobranca);
+    setFormaPagamento("pix");
+    setReferenciaPagamento("");
+    setModalPagamento(true);
+  };
+
+  const confirmarPagamento = async () => {
+    if (!cobrancaSelecionada) return;
+
+    if (!["pix", "cash", "card"].includes(formaPagamento)) {
+      setErro("Selecione uma forma de pagamento válida.");
+      return;
+    }
+
+    setConfirmandoPagamento(true);
+    setErro("");
+    setMensagem("");
+
+    try {
+      const { error } = await supabase.rpc(
+        "admin_confirm_subscription_payment",
+        {
+          p_invoice_id: cobrancaSelecionada.id,
+          p_payment_method: formaPagamento,
+          p_payment_reference: referenciaPagamento.trim() || null,
+        }
+      );
+
+      if (error) throw error;
+
+      setModalPagamento(false);
+      setCobrancaSelecionada(null);
+      setReferenciaPagamento("");
+
+      setMensagem(
+        "Pagamento confirmado. A assinatura foi atualizada."
+      );
+
+      await carregarDados();
+    } catch (error: unknown) {
+      console.error("Erro ao confirmar pagamento:", error);
+
+      setErro(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível confirmar o pagamento."
+      );
+    } finally {
+      setConfirmandoPagamento(false);
+    }
+  };
+
+  const planoSelecionado = planos.find(
+    (plano) => plano.id === novoPlano
+  );
+
+  const valorNovo = planoSelecionado
+    ? novoCiclo === "annual"
+      ? planoSelecionado.annual_price
+      : planoSelecionado.monthly_price
+    : 0;
 
   const ativas = assinaturas.filter(
     (a) => a.status === "active"
@@ -272,14 +449,15 @@ export default function AssinaturasPage() {
 
   const cobrancasFiltradas = useMemo(() => {
     return cobrancas.filter((c) =>
-      c.restaurantName.toLowerCase().includes(busca.toLowerCase())
+      c.restaurantName
+        .toLowerCase()
+        .includes(busca.toLowerCase())
     );
   }, [cobrancas, busca]);
 
   return (
     <main className="min-h-screen bg-[#f5f7fb] p-5 text-slate-800 md:p-8">
       <div className="mx-auto max-w-7xl">
-
         <a
           href="/superadmin"
           className="text-sm font-medium text-blue-600 hover:underline"
@@ -295,18 +473,37 @@ export default function AssinaturasPage() {
             </p>
           </div>
 
-          <button
-            onClick={carregarDados}
-            disabled={carregando}
-            className="rounded-xl border bg-white px-5 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50 disabled:opacity-50"
-          >
-            {carregando ? "Atualizando..." : "Atualizar dados"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                setErro("");
+                setModalNova(true);
+              }}
+              disabled={carregando}
+              className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 disabled:opacity-50"
+            >
+              + Nova assinatura
+            </button>
+
+            <button
+              onClick={carregarDados}
+              disabled={carregando}
+              className="rounded-xl border bg-white px-5 py-3 text-sm font-semibold shadow-sm hover:bg-slate-50 disabled:opacity-50"
+            >
+              {carregando ? "Atualizando..." : "Atualizar dados"}
+            </button>
+          </div>
         </header>
 
         {erro && (
           <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             {erro}
+          </div>
+        )}
+
+        {mensagem && (
+          <div className="mb-6 rounded-xl border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+            {mensagem}
           </div>
         )}
 
@@ -390,18 +587,14 @@ export default function AssinaturasPage() {
                       </p>
 
                       <div className="mt-5">
-                        <p className="text-sm text-slate-500">
-                          Mensal
-                        </p>
+                        <p className="text-sm text-slate-500">Mensal</p>
                         <p className="text-2xl font-bold">
                           {moeda(plano.monthly_price)}
                         </p>
                       </div>
 
                       <div className="mt-4 border-t pt-4">
-                        <p className="text-sm text-slate-500">
-                          Anual
-                        </p>
+                        <p className="text-sm text-slate-500">Anual</p>
                         <p className="text-xl font-bold text-blue-700">
                           {moeda(plano.annual_price)}
                         </p>
@@ -504,6 +697,14 @@ export default function AssinaturasPage() {
                         ? item.subscription_plans?.annual_price
                         : item.subscription_plans?.monthly_price;
 
+                    const cobrancasDaAssinatura = (
+                      item.subscription_invoices || []
+                    ).slice().sort(
+                      (a, b) =>
+                        new Date(b.created_at).getTime() -
+                        new Date(a.created_at).getTime()
+                    );
+
                     return (
                       <article
                         key={item.id}
@@ -579,6 +780,90 @@ export default function AssinaturasPage() {
                             Cancelamento programado para o fim do período.
                           </p>
                         )}
+
+                        {cobrancasDaAssinatura.length > 0 && (
+                          <div className="mt-5 border-t pt-4">
+                            <h4 className="mb-3 text-sm font-bold">
+                              Cobranças desta assinatura
+                            </h4>
+
+                            <div className="space-y-3">
+                              {cobrancasDaAssinatura.map((cobranca) => {
+                                const cobrancaCompleta: Cobranca = {
+                                  ...cobranca,
+                                  subscription_id: item.id,
+                                  restaurantName:
+                                    item.restaurants?.name ||
+                                    "Restaurante não identificado",
+                                };
+
+                                return (
+                                  <div
+                                    key={cobranca.id}
+                                    className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                                  >
+                                    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                                      <div>
+                                        <p className="font-bold">
+                                          {moeda(
+                                            cobranca.amount,
+                                            cobranca.currency
+                                          )}
+                                        </p>
+
+                                        <span
+                                          className={`mt-2 inline-block rounded-full px-3 py-1 text-xs font-semibold ${statusCor(
+                                            cobranca.status
+                                          )}`}
+                                        >
+                                          {statusLabel(cobranca.status)}
+                                        </span>
+
+                                        <p className="mt-2 text-xs text-slate-500">
+                                          Vencimento:{" "}
+                                          {dataFormatada(cobranca.due_date)}
+                                        </p>
+
+                                        {cobranca.status === "paid" && (
+                                          <>
+                                            <p className="text-xs text-slate-500">
+                                              Pago em:{" "}
+                                              {dataFormatada(cobranca.paid_at)}
+                                            </p>
+                                            <p className="text-xs text-slate-500">
+                                              Forma:{" "}
+                                              {formaPagamentoLabel(
+                                                cobranca.payment_method
+                                              )}
+                                            </p>
+                                            {cobranca.payment_reference && (
+                                              <p className="text-xs text-slate-500">
+                                                Referência:{" "}
+                                                {cobranca.payment_reference}
+                                              </p>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+
+                                      {cobranca.status === "pending" && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            abrirConfirmacao(cobrancaCompleta)
+                                          }
+                                          className="rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-700"
+                                        >
+                                          Confirmar pagamento
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </article>
                     );
                   })}
@@ -611,9 +896,7 @@ export default function AssinaturasPage() {
                         </div>
 
                         <div>
-                          <p className="text-xs text-slate-400">
-                            Valor
-                          </p>
+                          <p className="text-xs text-slate-400">Valor</p>
                           <p className="font-bold">
                             {moeda(item.amount, item.currency)}
                           </p>
@@ -635,7 +918,22 @@ export default function AssinaturasPage() {
                           <p className="font-bold">
                             {dataFormatada(item.paid_at)}
                           </p>
+                          {item.status === "paid" && (
+                            <p className="text-xs text-slate-500">
+                              {formaPagamentoLabel(item.payment_method)}
+                            </p>
+                          )}
                         </div>
+
+                        {item.status === "pending" && (
+                          <button
+                            type="button"
+                            onClick={() => abrirConfirmacao(item)}
+                            className="rounded-xl bg-green-600 px-4 py-3 text-sm font-semibold text-white hover:bg-green-700"
+                          >
+                            Confirmar pagamento
+                          </button>
+                        )}
                       </div>
                     </article>
                   ))}
@@ -649,6 +947,303 @@ export default function AssinaturasPage() {
               )}
             </section>
           </>
+        )}
+
+        {/* Modal de nova assinatura */}
+        {modalNova && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/50 p-4"
+            onClick={(e) => {
+              if (e.target === e.currentTarget && !salvando) {
+                setModalNova(false);
+              }
+            }}
+          >
+            <div className="my-auto w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+              <div className="mb-6 flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold">
+                    Nova assinatura
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Cadastre o plano e gere a primeira cobrança.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setModalNova(false)}
+                  disabled={salvando}
+                  className="rounded-lg px-3 py-2 text-xl text-slate-400 hover:bg-slate-100 disabled:opacity-50"
+                  aria-label="Fechar"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    Restaurante
+                  </label>
+
+                  <select
+                    value={novoRestaurante}
+                    onChange={(e) =>
+                      setNovoRestaurante(e.target.value)
+                    }
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+                    disabled={salvando}
+                  >
+                    <option value="">
+                      Selecione um restaurante
+                    </option>
+
+                    {restaurantes.map((restaurante) => (
+                      <option
+                        key={restaurante.id}
+                        value={restaurante.id}
+                      >
+                        {restaurante.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    Plano
+                  </label>
+
+                  <select
+                    value={novoPlano}
+                    onChange={(e) => setNovoPlano(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+                    disabled={salvando}
+                  >
+                    <option value="">Selecione um plano</option>
+
+                    {planos
+                      .filter((plano) => plano.is_active)
+                      .map((plano) => (
+                        <option key={plano.id} value={plano.id}>
+                          {plano.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    Ciclo de cobrança
+                  </label>
+
+                  <select
+                    value={novoCiclo}
+                    onChange={(e) => setNovoCiclo(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+                    disabled={salvando}
+                  >
+                    <option value="monthly">Mensal</option>
+                    <option value="annual">Anual</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    Data de início e vencimento
+                  </label>
+
+                  <input
+                    type="date"
+                    value={novaData}
+                    onChange={(e) => setNovaData(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+                    disabled={salvando}
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    A primeira cobrança terá vencimento nesta data.
+                  </p>
+                </div>
+
+                {planoSelecionado && (
+                  <div className="rounded-xl bg-blue-50 p-4">
+                    <p className="text-sm text-blue-800">
+                      Valor da primeira cobrança
+                    </p>
+                    <p className="mt-1 text-2xl font-bold text-blue-900">
+                      {moeda(valorNovo)}
+                    </p>
+                    <p className="mt-1 text-xs text-blue-700">
+                      {novoCiclo === "annual"
+                        ? "Cobrança anual"
+                        : "Cobrança mensal"}
+                    </p>
+                  </div>
+                )}
+
+                <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+                  A assinatura ficará aguardando pagamento. Ela só será
+                  ativada depois da confirmação do recebimento pelo
+                  SuperAdmin.
+                </div>
+
+                {restaurantes.length === 0 && (
+                  <p className="text-sm text-red-600">
+                    Nenhum restaurante disponível para cadastro.
+                  </p>
+                )}
+              </div>
+
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setModalNova(false)}
+                  disabled={salvando}
+                  className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={criarAssinatura}
+                  disabled={
+                    salvando ||
+                    !novoRestaurante ||
+                    !novoPlano ||
+                    !novaData
+                  }
+                  className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {salvando
+                    ? "Criando assinatura..."
+                    : "Criar assinatura"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de confirmação de pagamento */}
+        {modalPagamento && cobrancaSelecionada && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-black/50 p-4"
+            onClick={(e) => {
+              if (
+                e.target === e.currentTarget &&
+                !confirmandoPagamento
+              ) {
+                setModalPagamento(false);
+              }
+            }}
+          >
+            <div className="my-auto w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+              <div className="mb-6 flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold">
+                    Confirmar pagamento
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    {cobrancaSelecionada.restaurantName}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setModalPagamento(false)}
+                  disabled={confirmandoPagamento}
+                  className="rounded-lg px-3 py-2 text-xl text-slate-400 hover:bg-slate-100 disabled:opacity-50"
+                  aria-label="Fechar"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="mb-5 rounded-xl bg-slate-50 p-4">
+                <p className="text-sm text-slate-500">
+                  Valor da cobrança
+                </p>
+                <p className="mt-1 text-2xl font-bold">
+                  {moeda(
+                    cobrancaSelecionada.amount,
+                    cobrancaSelecionada.currency
+                  )}
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  Vencimento:{" "}
+                  {dataFormatada(cobrancaSelecionada.due_date)}
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    Forma de pagamento
+                  </label>
+
+                  <select
+                    value={formaPagamento}
+                    onChange={(e) =>
+                      setFormaPagamento(e.target.value)
+                    }
+                    disabled={confirmandoPagamento}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none focus:border-blue-500"
+                  >
+                    <option value="pix">PIX</option>
+                    <option value="cash">Dinheiro</option>
+                    <option value="card">Cartão</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-semibold">
+                    Referência do pagamento (opcional)
+                  </label>
+
+                  <input
+                    type="text"
+                    value={referenciaPagamento}
+                    onChange={(e) =>
+                      setReferenciaPagamento(e.target.value)
+                    }
+                    maxLength={200}
+                    placeholder="Ex.: identificação do comprovante"
+                    disabled={confirmandoPagamento}
+                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-blue-500"
+                  />
+                </div>
+
+                <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
+                  Confirme somente depois de verificar que o valor foi
+                  realmente recebido. Essa ação ativa a assinatura e
+                  registra o pagamento no Financeiro.
+                </div>
+              </div>
+
+              <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <button
+                  type="button"
+                  onClick={() => setModalPagamento(false)}
+                  disabled={confirmandoPagamento}
+                  className="rounded-xl border px-5 py-3 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+
+                <button
+                  type="button"
+                  onClick={confirmarPagamento}
+                  disabled={confirmandoPagamento}
+                  className="rounded-xl bg-green-600 px-5 py-3 text-sm font-semibold text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {confirmandoPagamento
+                    ? "Confirmando..."
+                    : "Confirmar recebimento"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         <footer className="mt-8 border-t pt-5 text-xs text-slate-400">

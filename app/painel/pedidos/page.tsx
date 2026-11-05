@@ -1,5 +1,4 @@
-
-'use client'
+"use client"
 
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -29,6 +28,10 @@ type Order = {
   subtotal: number
   delivery_fee: number
   total: number
+  payment_method: string | null
+  payment_status: string
+  payment_amount: number | null
+  paid_at: string | null
   created_at: string
   order_items: OrderItem[]
 }
@@ -40,6 +43,7 @@ const menuItems = [
   { title: 'Pedidos', href: '/painel/pedidos', icon: '🧾' },
   { title: 'Mesas', href: '/painel/mesas', icon: '🪑' },
   { title: 'Loja', href: '/painel/loja', icon: '🏪' },
+  { title: 'Financeiro', href: '/painel/financeiro', icon: '💰' },
 ]
 
 const statuses = [
@@ -195,6 +199,10 @@ export default function PedidosPage() {
           subtotal,
           delivery_fee,
           total,
+          payment_method,
+          payment_status,
+          payment_amount,
+          paid_at,
           created_at,
           order_items (
             id,
@@ -367,6 +375,60 @@ export default function PedidosPage() {
     }
   }
 
+  async function confirmPayment(order: Order) {
+    if (
+      order.payment_status !== 'pending' ||
+      order.status === 'cancelled'
+    ) {
+      return
+    }
+
+    const confirmed = window.confirm(
+      `Confirma que recebeu o pagamento de ${formatPrice(order.total)}?`
+    )
+
+    if (!confirmed) return
+
+    setUpdating(order.id)
+    setError('')
+
+    try {
+      const { data, error } = await supabase
+        .from('orders')
+        .update({
+          payment_status: 'paid',
+          payment_amount: order.total,
+          paid_at: new Date().toISOString(),
+        })
+        .eq('id', order.id)
+        .eq('payment_status', 'pending')
+        .select('id')
+        .maybeSingle()
+
+      if (error) {
+        setError(
+          'Não foi possível confirmar o pagamento: ' + error.message
+        )
+        return
+      }
+
+      if (!data) {
+        setError(
+          'O pagamento já foi atualizado ou o pedido não está disponível.'
+        )
+        await loadOrders()
+        return
+      }
+
+      await loadOrders()
+    } catch (err) {
+      console.error('Erro ao confirmar pagamento:', err)
+      setError('Ocorreu um erro ao confirmar o pagamento.')
+    } finally {
+      setUpdating(null)
+    }
+  }
+
   function formatPrice(value: number) {
     return Number(value || 0).toLocaleString('pt-BR', {
       style: 'currency',
@@ -388,6 +450,19 @@ export default function PedidosPage() {
     if (orderType === 'pickup') return '🏪 Retirada'
     if (orderType === 'table') return '🍽️ Mesa'
     return orderType
+  }
+
+  function getPaymentMethodLabel(method: string | null) {
+    if (method === 'pix') return 'PIX'
+    if (method === 'cash') return 'Dinheiro'
+    if (method === 'card') return 'Cartão'
+    return 'Não informado'
+  }
+
+  function getPaymentStatusLabel(status: string) {
+    if (status === 'paid') return '✓ Pagamento confirmado'
+    if (status === 'refunded') return 'Pagamento estornado'
+    return 'Aguardando pagamento'
   }
 
   function getStatusLabel(order: Order) {
@@ -428,7 +503,6 @@ export default function PedidosPage() {
     return 'bg-orange-100 text-orange-800'
   }
 
-  // Fundo e borda próprios para cada pedido
   function getOrderCardColors(order: Order) {
     if (order.status === 'completed') {
       return 'border-emerald-200 bg-emerald-50'
@@ -659,7 +733,7 @@ export default function PedidosPage() {
           ))}
         </div>
 
-        {/* GRADE DE PEDIDOS: 3 POR LINHA NO DESKTOP */}
+        {/* GRADE DE PEDIDOS */}
         {loading ? (
           <div className="rounded-xl border border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-500">
             Carregando pedidos...
@@ -759,6 +833,43 @@ export default function PedidosPage() {
                       </span>
                     </div>
 
+                    {/* PAGAMENTO */}
+                    <div className="rounded-lg border border-slate-200 bg-white/80 p-3">
+                      <p className="text-[10px] font-bold uppercase text-slate-500">
+                        Forma de pagamento
+                      </p>
+
+                      <p className="mt-1 text-sm font-bold text-slate-800">
+                        {getPaymentMethodLabel(order.payment_method)}
+                      </p>
+
+                      <p
+                        className={`mt-1 text-xs font-bold ${
+                          order.payment_status === 'paid'
+                            ? 'text-emerald-700'
+                            : order.payment_status === 'refunded'
+                              ? 'text-red-700'
+                              : 'text-amber-700'
+                        }`}
+                      >
+                        {getPaymentStatusLabel(order.payment_status)}
+                      </p>
+
+                      {order.payment_status === 'paid' && (
+                        <>
+                          <p className="mt-1 text-xs text-slate-600">
+                            Valor recebido: {formatPrice(order.payment_amount ?? 0)}
+                          </p>
+
+                          {order.paid_at && (
+                            <p className="mt-1 text-[10px] text-slate-500">
+                              Recebido em: {formatDate(order.paid_at)}
+                            </p>
+                          )}
+                        </>
+                      )}
+                    </div>
+
                     {isTable && (
                       <div className="rounded-lg border border-emerald-200 bg-emerald-100/70 px-3 py-2">
                         <p className="text-[10px] font-bold uppercase text-emerald-800">
@@ -853,6 +964,18 @@ export default function PedidosPage() {
                         Salvando alteração...
                       </p>
                     )}
+
+                    {order.payment_status === 'pending' &&
+                      order.status !== 'cancelled' && (
+                        <button
+                          type="button"
+                          disabled={updating === order.id}
+                          onClick={() => void confirmPayment(order)}
+                          className="mb-3 w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          ✓ Confirmar pagamento recebido
+                        </button>
+                      )}
 
                     {order.status === 'received' && (
                       <div className="grid grid-cols-2 gap-2">

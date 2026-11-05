@@ -450,6 +450,7 @@ export default function PublicMenu({
               p_neighborhood_id: selectedNeighborhood.id,
               p_delivery_address: deliveryAddress.trim(),
               p_items: items,
+              p_payment_method: paymentMethod,
             }
           )
         } else {
@@ -507,6 +508,7 @@ export default function PublicMenu({
               p_items: items,
               p_latitude: position.coords.latitude,
               p_longitude: position.coords.longitude,
+              p_payment_method: paymentMethod,
             }
           )
         }
@@ -521,6 +523,7 @@ export default function PublicMenu({
             p_neighborhood_id: null,
             p_delivery_address: null,
             p_items: items,
+            p_payment_method: paymentMethod,
           }
         )
       }
