@@ -1,4 +1,5 @@
 
+import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import PublicMenu from "../../cardapio/[slug]/PublicMenu";
 import { supabase } from "../../lib/supabase";
@@ -8,6 +9,8 @@ type Props = {
 };
 
 export default async function MesaPage({ params }: Props) {
+  await connection();
+
   const { token } = await params;
 
   const { data, error } = await supabase.rpc(
@@ -23,9 +26,7 @@ export default async function MesaPage({ params }: Props) {
     <>
       <div className="bg-orange-600 px-4 py-3 text-center text-white">
         <p className="font-semibold">{data.table_name}</p>
-        <p className="text-sm">
-          Faça seu pedido pela mesa
-        </p>
+        <p className="text-sm">Faça seu pedido pela mesa</p>
       </div>
 
       <PublicMenu
