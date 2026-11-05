@@ -1,25 +1,11 @@
-<<<<<<< Updated upstream
-
-export const instant = false;
-
-import { notFound } from "next/navigation";
-import PublicMenu from "../../../cardapio/[slug]/PublicMenu";
-import { supabase } from "../../../lib/supabase";
-=======
->>>>>>> Stashed changes
 
 'use client'
 
-<<<<<<< Updated upstream
-export default async function MesaPage({ params }: Props) {
-  const { token } = await params;
-=======
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import QRCode from 'qrcode'
 import { supabase } from '../../../lib/supabase'
->>>>>>> Stashed changes
 
 type Comanda = {
   id: string
@@ -357,23 +343,6 @@ export default function MesasPage() {
   }
 
   return (
-<<<<<<< Updated upstream
-    <>
-      <div className="bg-orange-600 px-4 py-3 text-center text-white">
-        <p className="font-semibold">{data.table_name}</p>
-        <p className="text-sm">
-          Faça seu pedido pela mesa
-        </p>
-      </div>
-
-      <PublicMenu
-        slug={data.restaurant_slug}
-        tableToken={token}
-      />
-    </>
-  );
-}
-=======
     <div className="min-h-screen bg-[#f5f7fb] text-slate-800 md:flex">
 
       {/* MENU LATERAL */}
@@ -844,4 +813,3 @@ export default function MesasPage() {
     </div>
   )
 }
->>>>>>> Stashed changes
