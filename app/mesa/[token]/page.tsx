@@ -1,9 +1,10 @@
+export const instant = false;
+
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { notFound } from "next/navigation";
 import PublicMenu from "../../cardapio/[slug]/PublicMenu";
 import { supabase } from "../../lib/supabase";
-
 type Props = {
   params: Promise<{ token: string }>;
 };
