@@ -1,3 +1,4 @@
+
 'use client'
 
 import { Suspense, useState, type FormEvent } from 'react'
@@ -5,12 +6,13 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 
 type TipoCadastro = 'restaurant' | 'customer'
+type Modo = 'login' | 'cadastro' | 'recuperar'
 
 function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const [modo, setModo] = useState<'login' | 'cadastro'>(
+  const [modo, setModo] = useState<Modo>(
     searchParams.get('cadastro') === 'true' ? 'cadastro' : 'login'
   )
 
@@ -347,10 +349,49 @@ function LoginContent() {
     }
   }
 
-  function trocarModo(novoModo: 'login' | 'cadastro') {
+  async function recuperarSenha(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault()
+    setErro('')
+    setSucesso('')
+
+    if (!email.trim()) {
+      setErro('Informe seu e-mail.')
+      return
+    }
+
+    setCarregando(true)
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        {
+          redirectTo: `${window.location.origin}/redefinir-senha`,
+        }
+      )
+
+      if (error) {
+        console.error('Erro do Supabase ao recuperar senha:', error)
+        setErro('Não foi possível enviar o e-mail. Tente novamente.')
+        return
+      }
+
+      setSucesso(
+        'Se esse e-mail estiver cadastrado, você receberá um link para redefinir sua senha. Verifique também a caixa de spam.'
+      )
+    } catch (error) {
+      console.error('Erro ao recuperar senha:', error)
+      setErro('Ocorreu um erro. Tente novamente.')
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  function trocarModo(novoModo: Modo) {
     setModo(novoModo)
     setErro('')
     setSucesso('')
+    setSenha('')
+    setConfirmarSenha('')
   }
 
   function trocarTipoCadastro(tipo: TipoCadastro) {
@@ -362,7 +403,13 @@ function LoginContent() {
   return (
     <main style={estiloMain}>
       <form
-        onSubmit={modo === 'login' ? entrar : cadastrar}
+        onSubmit={
+          modo === 'login'
+            ? entrar
+            : modo === 'cadastro'
+              ? cadastrar
+              : recuperarSenha
+        }
         style={estiloFormulario}
       >
         <h1 style={{ fontSize: 30, marginBottom: 8 }}>
@@ -372,7 +419,9 @@ function LoginContent() {
         <p style={{ color: '#666', marginBottom: 25 }}>
           {modo === 'login'
             ? 'Entre na sua conta para continuar.'
-            : 'Escolha como deseja criar sua conta.'}
+            : modo === 'cadastro'
+              ? 'Escolha como deseja criar sua conta.'
+              : 'Informe seu e-mail para receber o link de recuperação.'}
         </p>
 
         {modo === 'cadastro' && (
@@ -576,33 +625,49 @@ function LoginContent() {
           style={estiloInput}
         />
 
-        <label style={estiloLabel}>Senha</label>
+        {modo === 'login' && (
+          <div style={{ textAlign: 'right', marginBottom: 18 }}>
+            <button
+              type="button"
+              onClick={() => trocarModo('recuperar')}
+              style={estiloLink}
+            >
+              Esqueci minha senha
+            </button>
+          </div>
+        )}
 
-        <input
-          type="password"
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-          required
-          minLength={6}
-          autoComplete={
-            modo === 'login' ? 'current-password' : 'new-password'
-          }
-          style={estiloInput}
-        />
-
-        {modo === 'cadastro' && (
+        {modo !== 'recuperar' && (
           <>
-            <label style={estiloLabel}>Confirmar senha</label>
+            <label style={estiloLabel}>Senha</label>
 
             <input
               type="password"
-              value={confirmarSenha}
-              onChange={(e) => setConfirmarSenha(e.target.value)}
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
               required
               minLength={6}
-              autoComplete="new-password"
+              autoComplete={
+                modo === 'login' ? 'current-password' : 'new-password'
+              }
               style={estiloInput}
             />
+
+            {modo === 'cadastro' && (
+              <>
+                <label style={estiloLabel}>Confirmar senha</label>
+
+                <input
+                  type="password"
+                  value={confirmarSenha}
+                  onChange={(e) => setConfirmarSenha(e.target.value)}
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                  style={estiloInput}
+                />
+              </>
+            )}
           </>
         )}
 
@@ -623,7 +688,9 @@ function LoginContent() {
             ? 'Aguarde...'
             : modo === 'login'
               ? 'Entrar'
-              : 'Criar minha conta'}
+              : modo === 'cadastro'
+                ? 'Criar minha conta'
+                : 'Enviar link de recuperação'}
         </button>
 
         <div style={estiloRodape}>
@@ -640,13 +707,15 @@ function LoginContent() {
             </p>
           ) : (
             <p style={{ color: '#666' }}>
-              Já tem conta?{' '}
+              {modo === 'recuperar'
+                ? 'Lembrou sua senha? '
+                : 'Já tem conta? '}
               <button
                 type="button"
                 onClick={() => trocarModo('login')}
                 style={estiloLink}
               >
-                Já tenho conta
+                Voltar para entrar
               </button>
             </p>
           )}
