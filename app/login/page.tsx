@@ -1,13 +1,12 @@
-
 'use client'
 
-import { useState, type FormEvent } from 'react'
+import { Suspense, useState, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 
-type TipoCadastro = 'customer' | 'restaurant'
+type TipoCadastro = 'restaurant' | 'customer'
 
-export default function Home() {
+function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -15,16 +14,15 @@ export default function Home() {
     searchParams.get('cadastro') === 'true' ? 'cadastro' : 'login'
   )
 
-  const [tipoCadastro, setTipoCadastro] = useState<TipoCadastro>('restaurant')
+  const [tipoCadastro, setTipoCadastro] =
+    useState<TipoCadastro>('restaurant')
 
   const [nome, setNome] = useState('')
   const [empresa, setEmpresa] = useState('')
   const [tipoEstabelecimento, setTipoEstabelecimento] = useState('')
-
   const [documento, setDocumento] = useState('')
   const [telefone, setTelefone] = useState('')
   const [email, setEmail] = useState('')
-
   const [cep, setCep] = useState('')
   const [rua, setRua] = useState('')
   const [numero, setNumero] = useState('')
@@ -32,10 +30,8 @@ export default function Home() {
   const [bairro, setBairro] = useState('')
   const [cidade, setCidade] = useState('')
   const [estado, setEstado] = useState('')
-
   const [senha, setSenha] = useState('')
   const [confirmarSenha, setConfirmarSenha] = useState('')
-
   const [erro, setErro] = useState('')
   const [sucesso, setSucesso] = useState('')
   const [carregando, setCarregando] = useState(false)
@@ -132,7 +128,6 @@ export default function Home() {
         return
       }
 
-      // 1. Verifica se é administrador
       const { data: admin, error: adminError } = await supabase
         .from('platform_admins')
         .select('user_id')
@@ -149,12 +144,12 @@ export default function Home() {
         return
       }
 
-      // 2. Verifica se possui estabelecimento aprovado
-      const { data: membership, error: membershipError } = await supabase
-        .from('memberships')
-        .select('restaurant_id')
-        .eq('user_id', data.user.id)
-        .maybeSingle()
+      const { data: membership, error: membershipError } =
+        await supabase
+          .from('memberships')
+          .select('restaurant_id')
+          .eq('user_id', data.user.id)
+          .maybeSingle()
 
       if (membershipError) {
         setErro('Não foi possível verificar seu estabelecimento.')
@@ -166,7 +161,6 @@ export default function Home() {
         return
       }
 
-      // 3. Verifica solicitação de estabelecimento
       const { data: request, error: requestError } = await supabase
         .from('restaurant_requests')
         .select('status, rejection_reason')
@@ -194,7 +188,6 @@ export default function Home() {
         return
       }
 
-      // 4. Verifica se é cliente
       const { data: customer, error: customerError } = await supabase
         .from('customer_profiles')
         .select('user_id')
@@ -294,7 +287,9 @@ export default function Home() {
             business_name:
               tipoCadastro === 'restaurant' ? empresa.trim() : '',
             business_type:
-              tipoCadastro === 'restaurant' ? tipoEstabelecimento : '',
+              tipoCadastro === 'restaurant'
+                ? tipoEstabelecimento
+                : '',
             document: documentoLimpo,
             phone: telefone.trim(),
             postal_code: cepLimpo,
@@ -481,9 +476,7 @@ export default function Home() {
               style={estiloInput}
             />
 
-            <label style={estiloLabel}>
-              Telefone / WhatsApp
-            </label>
+            <label style={estiloLabel}>Telefone / WhatsApp</label>
 
             <input
               type="tel"
@@ -527,9 +520,7 @@ export default function Home() {
               style={estiloInput}
             />
 
-            <label style={estiloLabel}>
-              Complemento (opcional)
-            </label>
+            <label style={estiloLabel}>Complemento (opcional)</label>
 
             <input
               type="text"
@@ -615,17 +606,9 @@ export default function Home() {
           </>
         )}
 
-        {erro && (
-          <p style={estiloErro}>
-            {erro}
-          </p>
-        )}
+        {erro && <p style={estiloErro}>{erro}</p>}
 
-        {sucesso && (
-          <p style={estiloSucesso}>
-            {sucesso}
-          </p>
-        )}
+        {sucesso && <p style={estiloSucesso}>{sucesso}</p>}
 
         <button
           type="submit"
@@ -670,6 +653,14 @@ export default function Home() {
         </div>
       </form>
     </main>
+  )
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div>Carregando...</div>}>
+      <LoginContent />
+    </Suspense>
   )
 }
 
