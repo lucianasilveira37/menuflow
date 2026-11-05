@@ -2,6 +2,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
 
 type OrderItem = {
@@ -32,6 +33,15 @@ type Order = {
   order_items: OrderItem[]
 }
 
+const menuItems = [
+  { title: 'Visão geral', href: '/painel', icon: '▦' },
+  { title: 'Produtos', href: '/painel/produtos', icon: '🍕' },
+  { title: 'Categorias', href: '/painel/categorias', icon: '▤' },
+  { title: 'Pedidos', href: '/painel/pedidos', icon: '🧾' },
+  { title: 'Mesas', href: '/painel/mesas', icon: '🪑' },
+  { title: 'Loja', href: '/painel/loja', icon: '🏪' },
+]
+
 const statuses = [
   { value: 'received', label: 'Recebido' },
   { value: 'preparing', label: 'Em preparo' },
@@ -50,6 +60,12 @@ const filters = [
   { value: 'completed', label: 'Concluídos' },
   { value: 'cancelled', label: 'Cancelados' },
 ]
+
+const primaryButton =
+  'rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50'
+
+const dangerButton =
+  'rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50'
 
 export default function PedidosPage() {
   const [orders, setOrders] = useState<Order[]>([])
@@ -164,7 +180,6 @@ export default function PedidosPage() {
         return
       }
 
-      // Busca os pedidos sem depender do relacionamento automático das mesas.
       const { data, error: ordersError } = await supabase
         .from('orders')
         .select(`
@@ -199,7 +214,6 @@ export default function PedidosPage() {
 
       const ordersData = data || []
 
-      // Busca os nomes das mesas diretamente pelo ID.
       const tableIds = [
         ...new Set(
           ordersData
@@ -211,11 +225,12 @@ export default function PedidosPage() {
       let tablesMap: Record<string, string> = {}
 
       if (tableIds.length > 0) {
-        const { data: tablesData, error: tablesError } = await supabase
-          .from('restaurant_tables')
-          .select('id, name')
-          .eq('restaurant_id', membership.restaurant_id)
-          .in('id', tableIds)
+        const { data: tablesData, error: tablesError } =
+          await supabase
+            .from('restaurant_tables')
+            .select('id, name')
+            .eq('restaurant_id', membership.restaurant_id)
+            .in('id', tableIds)
 
         if (tablesError) {
           console.error('Erro ao buscar mesas:', tablesError)
@@ -229,7 +244,6 @@ export default function PedidosPage() {
         }
       }
 
-      // Acrescenta o nome da mesa a cada pedido.
       const newOrders: Order[] = ordersData.map(order => ({
         ...order,
         restaurant_tables: order.table_id
@@ -279,7 +293,7 @@ export default function PedidosPage() {
           schema: 'public',
           table: 'orders',
         },
-        (payload) => {
+        payload => {
           const newOrder = payload.new as { id?: string }
 
           if (
@@ -305,7 +319,7 @@ export default function PedidosPage() {
           void loadOrders()
         }
       )
-      .subscribe((status) => {
+      .subscribe(status => {
         console.log('Status do Realtime:', status)
 
         if (
@@ -361,7 +375,12 @@ export default function PedidosPage() {
   }
 
   function formatDate(value: string) {
-    return new Date(value).toLocaleString('pt-BR')
+    return new Date(value).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
   }
 
   function getOrderTypeLabel(orderType: string) {
@@ -387,123 +406,251 @@ export default function PedidosPage() {
 
   function getStatusColors(order: Order) {
     if (order.status === 'completed') {
-      return { backgroundColor: '#dcfce7', color: '#15803d' }
+      return 'bg-emerald-100 text-emerald-800'
     }
 
     if (order.status === 'ready') {
-      return { backgroundColor: '#dbeafe', color: '#1d4ed8' }
+      return 'bg-blue-100 text-blue-800'
     }
 
     if (order.status === 'out_for_delivery') {
-      return { backgroundColor: '#ede9fe', color: '#6d28d9' }
+      return 'bg-violet-100 text-violet-800'
     }
 
     if (order.status === 'preparing') {
-      return { backgroundColor: '#fef3c7', color: '#92400e' }
+      return 'bg-amber-100 text-amber-800'
     }
 
     if (order.status === 'cancelled') {
-      return { backgroundColor: '#fee2e2', color: '#b91c1c' }
+      return 'bg-red-100 text-red-800'
     }
 
-    return { backgroundColor: '#ffedd5', color: '#c2410c' }
+    return 'bg-orange-100 text-orange-800'
+  }
+
+  // Fundo e borda próprios para cada pedido
+  function getOrderCardColors(order: Order) {
+    if (order.status === 'completed') {
+      return 'border-emerald-200 bg-emerald-50'
+    }
+
+    if (order.status === 'ready') {
+      return 'border-blue-200 bg-blue-50'
+    }
+
+    if (order.status === 'out_for_delivery') {
+      return 'border-violet-200 bg-violet-50'
+    }
+
+    if (order.status === 'preparing') {
+      return 'border-amber-200 bg-amber-50'
+    }
+
+    if (order.status === 'cancelled') {
+      return 'border-red-200 bg-red-50'
+    }
+
+    return 'border-orange-200 bg-orange-50'
+  }
+
+  function countOrders(status: string) {
+    return orders.filter(order => order.status === status).length
   }
 
   const filteredOrders = orders.filter(order =>
     filter === 'all' ? true : order.status === filter
   )
 
-  function countOrders(status: string) {
-    return orders.filter(order => order.status === status).length
-  }
-
-  if (loading) {
-    return (
-      <main className="dashboard-content">
-        Carregando pedidos...
-      </main>
-    )
-  }
+  const statCards = [
+    {
+      label: 'Total de pedidos',
+      value: orders.length,
+      icon: '🧾',
+      color: 'bg-blue-50 text-blue-700',
+    },
+    {
+      label: 'Recebidos',
+      value: countOrders('received'),
+      icon: '📥',
+      color: 'bg-orange-50 text-orange-700',
+    },
+    {
+      label: 'Em preparo',
+      value: countOrders('preparing'),
+      icon: '👨‍🍳',
+      color: 'bg-amber-50 text-amber-700',
+    },
+    {
+      label: 'Prontos',
+      value: countOrders('ready'),
+      icon: '✅',
+      color: 'bg-emerald-50 text-emerald-700',
+    },
+    {
+      label: 'Em entrega',
+      value: countOrders('out_for_delivery'),
+      icon: '🛵',
+      color: 'bg-violet-50 text-violet-700',
+    },
+  ]
 
   return (
-    <main className="dashboard-content">
-      <div className="dashboard-topbar">
-        <div>
-          <h1>Pedidos</h1>
-          <p>Acompanhe e gerencie os pedidos do seu restaurante.</p>
+    <div className="min-h-screen bg-[#f5f7fb] text-slate-800 md:flex">
+
+      {/* MENU LATERAL */}
+      <aside className="w-full bg-[#111827] p-5 text-white md:min-h-screen md:w-64 md:shrink-0">
+        <div className="mb-8">
+          <h1 className="text-2xl font-extrabold tracking-tight">
+            Menu<span className="text-blue-400">Flow</span>
+          </h1>
+          <p className="mt-1 text-xs text-slate-400">
+            Painel do restaurante
+          </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-          <button
-            type="button"
-            onClick={enableSound}
-            className="btn-primary"
+        <div className="mb-3 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Gerenciamento
+        </div>
+
+        <nav className="space-y-1">
+          {menuItems.map(item => {
+            const active = item.href === '/painel/pedidos'
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
+                  active
+                    ? 'bg-blue-600 font-semibold text-white'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <span className="text-lg">{item.icon}</span>
+                {item.title}
+              </Link>
+            )
+          })}
+        </nav>
+
+        <div className="mt-10 rounded-2xl border border-slate-700 bg-slate-800/60 p-4">
+          <div className="mb-2 text-sm font-semibold text-white">
+            Central de pedidos
+          </div>
+          <p className="text-xs leading-relaxed text-slate-400">
+            Acompanhe novos pedidos e atualize o andamento dos atendimentos.
+          </p>
+        </div>
+      </aside>
+
+      {/* CONTEÚDO */}
+      <main className="min-w-0 flex-1 p-4 md:p-7">
+
+        {/* CABEÇALHO */}
+        <div className="mb-7 flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
+          <div>
+            <div className="mb-2 text-sm text-slate-500">
+              MenuFlow <span className="mx-1">/</span> Gerenciamento
+            </div>
+
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+              Pedidos
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Acompanhe e gerencie os pedidos do seu restaurante.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={enableSound}
+              className={`rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                soundEnabled
+                  ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+                  : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              {soundEnabled ? '🔔 Som ativado' : '🔕 Ativar som'}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => loadOrders(true)}
+              disabled={loading}
+              className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+            >
+              {loading ? 'Atualizando...' : '↻ Atualizar'}
+            </button>
+          </div>
+        </div>
+
+        {/* ERRO */}
+        {error && (
+          <div
+            className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            role="alert"
           >
-            {soundEnabled ? '🔔 Som ativado' : '🔕 Ativar som'}
-          </button>
+            {error}
+          </div>
+        )}
 
-          <button
-            type="button"
-            onClick={() => loadOrders(true)}
-            className="btn-primary"
-          >
-            Atualizar
-          </button>
-        </div>
-      </div>
+        {/* INDICADORES */}
+        <div className="mb-7 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          {statCards.map(card => (
+            <div
+              key={card.label}
+              className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm md:p-4"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-slate-500">
+                  {card.label}
+                </span>
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-base ${card.color}`}>
+                  {card.icon}
+                </span>
+              </div>
 
-      {error && (
-        <div className="form-error" role="alert">
-          {error}
-        </div>
-      )}
-
-      <div className="dashboard-stats">
-        <div className="stat-card">
-          <span>Total de pedidos</span>
-          <strong>{orders.length}</strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Recebidos</span>
-          <strong>{countOrders('received')}</strong>
+              <div className="mt-2 text-2xl font-bold text-slate-900">
+                {card.value}
+              </div>
+            </div>
+          ))}
         </div>
 
-        <div className="stat-card">
-          <span>Em preparo</span>
-          <strong>{countOrders('preparing')}</strong>
+        {/* HISTÓRICO E FILTROS */}
+        <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">
+              Histórico de pedidos
+            </h3>
+            <p className="mt-1 text-xs text-slate-500">
+              {filteredOrders.length} pedido(s) encontrado(s)
+            </p>
+          </div>
         </div>
 
-        <div className="stat-card">
-          <span>Prontos</span>
-          <strong>
-            {orders.filter(order => order.status === 'ready').length}
-          </strong>
-        </div>
-
-        <div className="stat-card">
-          <span>Em entrega</span>
-          <strong>{countOrders('out_for_delivery')}</strong>
-        </div>
-      </div>
-
-      <section className="dashboard-section">
-        <h2>Histórico de pedidos</h2>
-
-        <div className="order-filters">
+        <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
           {filters.map(item => (
             <button
               key={item.value}
               type="button"
-              className={
+              className={`flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${
                 filter === item.value
-                  ? 'order-filter active'
-                  : 'order-filter'
-              }
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+              }`}
               onClick={() => setFilter(item.value)}
             >
               {item.label}
-              <span>
+              <span
+                className={`rounded-md px-1.5 py-0.5 text-[10px] ${
+                  filter === item.value
+                    ? 'bg-white/20 text-white'
+                    : 'bg-slate-100 text-slate-600'
+                }`}
+              >
                 {item.value === 'all'
                   ? orders.length
                   : countOrders(item.value)}
@@ -512,10 +659,23 @@ export default function PedidosPage() {
           ))}
         </div>
 
-        {filteredOrders.length === 0 ? (
-          <p>Nenhum pedido encontrado nesse filtro.</p>
+        {/* GRADE DE PEDIDOS: 3 POR LINHA NO DESKTOP */}
+        {loading ? (
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-500">
+            Carregando pedidos...
+          </div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-12 text-center">
+            <div className="mb-3 text-4xl">🧾</div>
+            <h4 className="font-semibold text-slate-800">
+              Nenhum pedido encontrado
+            </h4>
+            <p className="mt-1 text-sm text-slate-500">
+              Não existem pedidos nesse filtro no momento.
+            </p>
+          </div>
         ) : (
-          <div className="orders-list">
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
             {filteredOrders.map(order => {
               const whatsappNumber = (order.customer_phone || '')
                 .replace(/\D/g, '')
@@ -526,209 +686,234 @@ export default function PedidosPage() {
               const tableName = order.restaurant_tables?.name
 
               return (
-                <article className="order-card" key={order.id}>
-                  <div className="order-card-header">
-                    <div className="order-title">
-                      <h3>Pedido #{order.id.slice(0, 8)}</h3>
+                <article
+                  key={order.id}
+                  className={`flex min-w-0 flex-col overflow-hidden rounded-xl border shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${getOrderCardColors(order)}`}
+                >
+                  {/* CABEÇALHO DO CARD */}
+                  <div className="border-b border-black/5 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="truncate text-sm font-extrabold text-slate-900">
+                          Pedido #{order.id.slice(0, 8)}
+                        </h4>
+                        <p className="mt-1 text-[11px] text-slate-600">
+                          {formatDate(order.created_at)}
+                        </p>
+                      </div>
 
                       <span
-                        className="order-status-badge"
-                        style={getStatusColors(order)}
+                        className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold ${getStatusColors(order)}`}
                       >
                         {getStatusLabel(order)}
                       </span>
                     </div>
 
-                    <span>{formatDate(order.created_at)}</span>
-                    <strong>{formatPrice(order.total)}</strong>
+                    <div className="mt-3 flex items-center justify-between rounded-lg bg-white/70 px-3 py-2">
+                      <span className="text-[11px] font-semibold uppercase text-slate-500">
+                        Total do pedido
+                      </span>
+                      <strong className="text-lg font-extrabold text-slate-900">
+                        {formatPrice(order.total)}
+                      </strong>
+                    </div>
                   </div>
 
-                  <div className="order-customer">
-                    <p>
-                      <strong>Cliente:</strong>{' '}
-                      {order.customer_name || 'Não informado'}
-                    </p>
+                  {/* INFORMAÇÕES DO CLIENTE */}
+                  <div className="space-y-2 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                        Cliente
+                      </span>
+                      <span className="max-w-[65%] truncate text-right text-xs font-bold text-slate-800">
+                        {order.customer_name || 'Não informado'}
+                      </span>
+                    </div>
 
-                    <p>
-                      <strong>WhatsApp:</strong>{' '}
-                      {order.customer_phone || 'Não informado'}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                        WhatsApp
+                      </span>
+                      <span className="truncate text-right text-xs text-slate-700">
+                        {order.customer_phone || 'Não informado'}
+                      </span>
+                    </div>
 
                     {whatsappNumber.length >= 12 && (
-                      <p>
-                        <a
-                          href={`https://wa.me/${whatsappNumber}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          Conversar pelo WhatsApp
-                        </a>
-                      </p>
+                      <a
+                        href={`https://wa.me/${whatsappNumber}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-100 px-3 py-2 text-xs font-bold text-emerald-800 transition hover:bg-emerald-200"
+                      >
+                        💬 Conversar pelo WhatsApp
+                      </a>
                     )}
 
-                    <p>
-                      <strong>Tipo do pedido:</strong>{' '}
-                      {getOrderTypeLabel(order.order_type)}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                        Tipo
+                      </span>
+                      <span className="text-xs font-semibold text-slate-800">
+                        {getOrderTypeLabel(order.order_type)}
+                      </span>
+                    </div>
 
                     {isTable && (
-                      <div style={{
-                        background: '#dcfce7',
-                        color: '#166534',
-                        padding: '12px 16px',
-                        borderRadius: '8px',
-                        margin: '12px 0',
-                        fontWeight: 'bold',
-                      }}>
-                        🍽️ PEDIDO PARA MESA
-
-                        <div style={{
-                          fontSize: '20px',
-                          marginTop: '4px',
-                        }}>
+                      <div className="rounded-lg border border-emerald-200 bg-emerald-100/70 px-3 py-2">
+                        <p className="text-[10px] font-bold uppercase text-emerald-800">
+                          🍽️ Pedido para mesa
+                        </p>
+                        <p className="mt-0.5 text-sm font-extrabold text-emerald-950">
                           {tableName || 'Mesa não identificada'}
-                        </div>
+                        </p>
                       </div>
                     )}
 
                     {isDelivery && (
-                      <>
-                        <p>
+                      <div className="space-y-1 rounded-lg border border-violet-200 bg-violet-100/70 p-2.5">
+                        <p className="text-[10px] font-bold uppercase text-violet-800">
+                          📍 Endereço de entrega
+                        </p>
+                        <p className="break-words text-xs text-violet-950">
                           <strong>Bairro:</strong>{' '}
                           {order.delivery_neighborhood || 'Não informado'}
                         </p>
-
-                        <p>
+                        <p className="break-words text-xs text-violet-950">
                           <strong>Endereço:</strong>{' '}
                           {order.delivery_address || 'Não informado'}
                         </p>
-                      </>
+                      </div>
                     )}
 
                     {isPickup && (
-                      <p>
-                        <strong>Modalidade:</strong> Retirada no local
-                      </p>
+                      <div className="rounded-lg bg-blue-100/80 px-3 py-2 text-xs font-semibold text-blue-800">
+                        🏪 Cliente fará retirada no local
+                      </div>
                     )}
                   </div>
 
-                  <div className="order-items">
-                    <h4>Produtos</h4>
+                  {/* PRODUTOS */}
+                  <div className="mx-3 rounded-lg border border-black/5 bg-white/65 p-3">
+                    <h5 className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-slate-600">
+                      Produtos ({order.order_items?.length || 0})
+                    </h5>
 
-                    {order.order_items?.map(item => (
-                      <div className="order-item" key={item.id}>
-                        <span>
-                          {item.quantity}x {item.product_name}
-                        </span>
+                    <div className="space-y-2">
+                      {order.order_items?.length ? (
+                        order.order_items.map(item => (
+                          <div
+                            key={item.id}
+                            className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2 last:border-0 last:pb-0"
+                          >
+                            <div className="min-w-0">
+                              <p className="break-words text-xs font-bold text-slate-800">
+                                {item.quantity}x {item.product_name}
+                              </p>
+                              <p className="mt-0.5 text-[10px] text-slate-500">
+                                {formatPrice(item.unit_price)} cada
+                              </p>
+                            </div>
 
-                        <strong>
-                          {formatPrice(item.total_price)}
-                        </strong>
+                            <strong className="shrink-0 text-xs text-slate-800">
+                              {formatPrice(item.total_price)}
+                            </strong>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-slate-500">
+                          Nenhum produto informado.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* RESUMO FINANCEIRO */}
+                    <div className="mt-3 space-y-1.5 border-t border-slate-200 pt-2">
+                      <div className="flex justify-between text-[11px] text-slate-500">
+                        <span>Subtotal</span>
+                        <span>{formatPrice(order.subtotal)}</span>
                       </div>
-                    ))}
-                  </div>
 
-                  <div className="order-items">
-                    <div className="order-item">
-                      <span>Subtotal</span>
-                      <strong>{formatPrice(order.subtotal)}</strong>
-                    </div>
+                      <div className="flex justify-between text-[11px] text-slate-500">
+                        <span>Taxa de entrega</span>
+                        <span>{formatPrice(order.delivery_fee)}</span>
+                      </div>
 
-                    <div className="order-item">
-                      <span>Taxa de entrega</span>
-                      <strong>
-                        {formatPrice(order.delivery_fee)}
-                      </strong>
-                    </div>
-
-                    <div className="order-item">
-                      <strong>Total</strong>
-                      <strong>{formatPrice(order.total)}</strong>
+                      <div className="flex justify-between border-t border-slate-200 pt-2 text-sm font-extrabold text-slate-900">
+                        <span>Total</span>
+                        <span>{formatPrice(order.total)}</span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="order-status">
-                    <strong>Ações do pedido</strong>
+                  {/* AÇÕES */}
+                  <div className="mt-auto p-3">
+                    {updating === order.id && (
+                      <p className="mb-2 text-center text-[11px] font-semibold text-blue-700">
+                        Salvando alteração...
+                      </p>
+                    )}
 
                     {order.status === 'received' && (
-                      <div style={{
-                        display: 'flex',
-                        gap: '10px',
-                        flexWrap: 'wrap',
-                        marginTop: '10px',
-                      }}>
+                      <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
                           disabled={updating === order.id}
-                          onClick={() => updateStatus(order.id, 'preparing')}
-                          style={{
-                            background: '#16a34a',
-                            color: '#fff',
-                            padding: '10px 16px',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                          }}
+                          onClick={() =>
+                            updateStatus(order.id, 'preparing')
+                          }
+                          className="rounded-lg bg-emerald-600 px-2 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
                         >
-                          Aceitar pedido
+                          ✓ Aceitar
                         </button>
 
                         <button
                           type="button"
                           disabled={updating === order.id}
                           onClick={() => {
-                            if (window.confirm('Deseja realmente recusar este pedido?')) {
+                            if (
+                              window.confirm(
+                                'Deseja realmente recusar este pedido?'
+                              )
+                            ) {
                               void updateStatus(order.id, 'cancelled')
                             }
                           }}
-                          style={{
-                            background: '#dc2626',
-                            color: '#fff',
-                            padding: '10px 16px',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                          }}
+                          className={dangerButton}
                         >
-                          Recusar pedido
+                          ✕ Recusar
                         </button>
                       </div>
                     )}
 
                     {order.status === 'preparing' && (
-                      <div style={{
-                        display: 'flex',
-                        gap: '10px',
-                        flexWrap: 'wrap',
-                        marginTop: '10px',
-                      }}>
+                      <div className="grid grid-cols-1 gap-2">
                         <button
                           type="button"
                           disabled={updating === order.id}
-                          onClick={() => updateStatus(order.id, 'ready')}
-                          className="btn-primary"
+                          onClick={() =>
+                            updateStatus(order.id, 'ready')
+                          }
+                          className={primaryButton}
                         >
                           {isPickup
-                            ? 'Pronto para retirada'
-                            : 'Marcar como pronto'}
+                            ? '✓ Pronto para retirada'
+                            : '✓ Marcar como pronto'}
                         </button>
 
                         <button
                           type="button"
                           disabled={updating === order.id}
                           onClick={() => {
-                            if (window.confirm('Deseja realmente cancelar este pedido?')) {
+                            if (
+                              window.confirm(
+                                'Deseja realmente cancelar este pedido?'
+                              )
+                            ) {
                               void updateStatus(order.id, 'cancelled')
                             }
                           }}
-                          style={{
-                            background: '#dc2626',
-                            color: '#fff',
-                            padding: '10px 16px',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                          }}
+                          className="rounded-lg border border-red-200 bg-white/70 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50"
                         >
                           Cancelar pedido
                         </button>
@@ -739,9 +924,10 @@ export default function PedidosPage() {
                       <button
                         type="button"
                         disabled={updating === order.id}
-                        onClick={() => updateStatus(order.id, 'out_for_delivery')}
-                        className="btn-primary"
-                        style={{ marginTop: '10px' }}
+                        onClick={() =>
+                          updateStatus(order.id, 'out_for_delivery')
+                        }
+                        className={`${primaryButton} w-full`}
                       >
                         🛵 Saiu para entrega
                       </button>
@@ -751,52 +937,55 @@ export default function PedidosPage() {
                       <button
                         type="button"
                         disabled={updating === order.id}
-                        onClick={() => updateStatus(order.id, 'completed')}
-                        className="btn-primary"
-                        style={{ marginTop: '10px' }}
+                        onClick={() =>
+                          updateStatus(order.id, 'completed')
+                        }
+                        className="w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
                       >
-                        Confirmar retirada
+                        ✓ Confirmar retirada
                       </button>
                     )}
 
-                    {order.status === 'ready' && !isDelivery && !isPickup && (
-                      <button
-                        type="button"
-                        disabled={updating === order.id}
-                        onClick={() => updateStatus(order.id, 'completed')}
-                        className="btn-primary"
-                        style={{ marginTop: '10px' }}
-                      >
-                        Concluir pedido
-                      </button>
-                    )}
+                    {order.status === 'ready' &&
+                      !isDelivery &&
+                      !isPickup && (
+                        <button
+                          type="button"
+                          disabled={updating === order.id}
+                          onClick={() =>
+                            updateStatus(order.id, 'completed')
+                          }
+                          className="w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+                        >
+                          ✓ Concluir pedido
+                        </button>
+                      )}
 
                     {order.status === 'out_for_delivery' && (
                       <button
                         type="button"
                         disabled={updating === order.id}
-                        onClick={() => updateStatus(order.id, 'completed')}
-                        className="btn-primary"
-                        style={{ marginTop: '10px' }}
+                        onClick={() =>
+                          updateStatus(order.id, 'completed')
+                        }
+                        className="w-full rounded-lg bg-emerald-600 px-3 py-2.5 text-xs font-bold text-white transition hover:bg-emerald-700 disabled:opacity-50"
                       >
-                        Confirmar entrega
+                        ✓ Confirmar entrega
                       </button>
                     )}
 
                     {order.status === 'completed' && (
-                      <p>
-                        {isDelivery
-                          ? '✅ Pedido entregue ao cliente.'
-                          : '✅ Pedido concluído.'}
-                      </p>
+                      <div className="rounded-lg bg-emerald-100 px-3 py-2.5 text-center text-xs font-bold text-emerald-800">
+                        ✅ {isDelivery
+                          ? 'Pedido entregue ao cliente.'
+                          : 'Pedido concluído.'}
+                      </div>
                     )}
 
                     {order.status === 'cancelled' && (
-                      <p>Pedido cancelado.</p>
-                    )}
-
-                    {updating === order.id && (
-                      <p>Salvando alteração...</p>
+                      <div className="rounded-lg bg-red-100 px-3 py-2.5 text-center text-xs font-bold text-red-800">
+                        Pedido cancelado.
+                      </div>
                     )}
                   </div>
                 </article>
@@ -804,7 +993,7 @@ export default function PedidosPage() {
             })}
           </div>
         )}
-      </section>
-    </main>
+      </main>
+    </div>
   )
 }

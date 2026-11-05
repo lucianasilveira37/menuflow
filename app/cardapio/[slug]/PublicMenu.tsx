@@ -85,6 +85,7 @@ export default function PublicMenu({
 
   const router = useRouter()
 
+  // Carrega restaurante, categorias, produtos e bairros.
   useEffect(() => {
     let active = true
 
@@ -113,12 +114,6 @@ export default function PublicMenu({
           restaurantData.delivery_validation_mode === 'gps'
             ? 'gps'
             : 'simple'
-
-        console.log('MENU CARREGADO:', {
-          restaurant: restaurantData.name,
-          restaurantId: restaurantData.id,
-          deliveryMode,
-        })
 
         const { data: openStatus, error: openStatusError } =
           await supabase.rpc('is_restaurant_open', {
@@ -189,6 +184,69 @@ export default function PublicMenu({
     }
   }, [slug])
 
+  // Preenche os dados do cliente cadastrado.
+  useEffect(() => {
+    let active = true
+
+    async function loadCustomerProfile() {
+      try {
+        const {
+          data: { user },
+          error: authError,
+        } = await supabase.auth.getUser()
+
+        if (authError) throw authError
+        if (!user || !active) return
+
+        const { data: profile, error: profileError } = await supabase
+          .from('customer_profiles')
+          .select(`
+            full_name,
+            document,
+            phone,
+            postal_code,
+            street,
+            address_number,
+            complement,
+            neighborhood,
+            city,
+            state
+          `)
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (profileError) throw profileError
+        if (!profile || !active) return
+
+        const addressParts = [
+          profile.street,
+          profile.address_number,
+          profile.complement,
+          profile.neighborhood,
+          profile.city,
+          profile.state,
+          profile.postal_code
+            ? `CEP: ${profile.postal_code}`
+            : '',
+        ].filter((part) => part && String(part).trim())
+
+        setCustomerName(profile.full_name || '')
+        setCustomerPhone(profile.phone || '')
+        setDeliveryAddress(addressParts.join(', '))
+        setNeighborhoodInput(profile.neighborhood || '')
+      } catch (error) {
+        console.error('Erro ao carregar cadastro do cliente:', error)
+      }
+    }
+
+    loadCustomerProfile()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // Atualiza o funcionamento da loja a cada 30 segundos.
   useEffect(() => {
     const restaurantId = restaurant?.id
     if (!restaurantId) return
@@ -236,6 +294,7 @@ export default function PublicMenu({
     return fee === 0 ? 'Grátis' : formatPrice(fee)
   }
 
+  // Adiciona produto e abre o carrinho.
   function addToCart(product: Product) {
     if (!isStoreOpen) return
 
@@ -254,6 +313,8 @@ export default function PublicMenu({
 
       return [...currentCart, { product, quantity: 1 }]
     })
+
+    setCartOpen(true)
   }
 
   function decreaseQuantity(productId: string) {
@@ -292,10 +353,10 @@ export default function PublicMenu({
 
   const finalTotal = cartTotal + deliveryFee
 
-  // O modo é definido pelo restaurante carregado do Supabase.
   const deliveryMode = restaurant?.delivery_validation_mode ?? 'simple'
   const requiresGps = deliveryMode === 'gps'
 
+  // Finaliza o pedido.
   async function finishOrder() {
     if (savingOrder) return
 
@@ -361,20 +422,9 @@ export default function PublicMenu({
         quantity: item.quantity,
       }))
 
-      let result
+      let result: { data: any; error: any }
 
-      console.log('FINALIZANDO PEDIDO:', {
-        restaurantId,
-        deliveryMode,
-        requiresGps,
-        orderType,
-        neighborhood: selectedNeighborhood?.name,
-      })
-
-      // PEDIDO POR MESA
       if (tableToken) {
-        console.log('CHAMANDO RPC DE PEDIDO NA MESA')
-
         result = await supabase.rpc(
           'create_public_table_order_with_tracking',
           {
@@ -384,18 +434,12 @@ export default function PublicMenu({
             p_customer_phone: normalizedPhone,
           }
         )
-      }
-
-      // PEDIDO DE ENTREGA
-      else if (orderType === 'delivery') {
+      } else if (orderType === 'delivery') {
         if (!selectedNeighborhood) {
           throw new Error('Informe um bairro válido para entrega.')
         }
 
-        // MODO SIMPLES: NÃO SOLICITA GPS.
         if (deliveryMode === 'simple') {
-          console.log('CHAMANDO RPC SEM GPS: create_public_order_with_tracking')
-
           result = await supabase.rpc(
             'create_public_order_with_tracking',
             {
@@ -408,12 +452,7 @@ export default function PublicMenu({
               p_items: items,
             }
           )
-        }
-
-        // MODO GPS: SOLICITA LOCALIZAÇÃO.
-        else {
-          console.log('CHAMANDO RPC COM GPS: create_public_order_with_tracking_and_location')
-
+        } else {
           if (!navigator.geolocation) {
             throw new Error(
               'Seu navegador não oferece suporte à localização GPS.'
@@ -432,20 +471,22 @@ export default function PublicMenu({
                 }
               )
             }
-          ).catch((error: GeolocationPositionError) => {
-            if (error.code === 1) {
+          ).catch((error: unknown) => {
+            const geoError = error as GeolocationPositionError
+
+            if (geoError.code === 1) {
               throw new Error(
                 'Você precisa permitir o acesso à localização para confirmar uma entrega.'
               )
             }
 
-            if (error.code === 2) {
+            if (geoError.code === 2) {
               throw new Error(
                 'Não foi possível identificar sua localização. Verifique o GPS do dispositivo.'
               )
             }
 
-            if (error.code === 3) {
+            if (geoError.code === 3) {
               throw new Error(
                 'A localização demorou muito para responder. Tente novamente.'
               )
@@ -469,12 +510,7 @@ export default function PublicMenu({
             }
           )
         }
-      }
-
-      // RETIRADA NO LOCAL
-      else {
-        console.log('CHAMANDO RPC DE RETIRADA')
-
+      } else {
         result = await supabase.rpc(
           'create_public_order_with_tracking',
           {
@@ -490,7 +526,7 @@ export default function PublicMenu({
       }
 
       if (result.error) {
-        console.error('ERRO RETORNADO PELO SUPABASE:', result.error)
+        console.error('Erro retornado pelo Supabase:', result.error)
         throw new Error(result.error.message)
       }
 
@@ -504,8 +540,6 @@ export default function PublicMenu({
           'O pedido foi criado, mas não foi possível obter o token de acompanhamento.'
         )
       }
-
-      console.log('PEDIDO CRIADO COM SUCESSO:', orderData.id)
 
       setCart([])
       setCustomerName('')
@@ -537,7 +571,11 @@ export default function PublicMenu({
   if (loading) {
     return (
       <main className="public-menu">
-        <p>Carregando cardápio...</p>
+        <style>{publicMenuStyles}</style>
+        <div className="pm-loading">
+          <span className="pm-loader" />
+          <p>Preparando seu cardápio...</p>
+        </div>
       </main>
     )
   }
@@ -545,53 +583,82 @@ export default function PublicMenu({
   if (error || !restaurant) {
     return (
       <main className="public-menu">
-        <h1>Cardápio indisponível</h1>
-        <p>{error || 'Restaurante não encontrado.'}</p>
+        <style>{publicMenuStyles}</style>
+        <div className="pm-error-page">
+          <span>🍽️</span>
+          <h1>Cardápio indisponível</h1>
+          <p>{error || 'Restaurante não encontrado.'}</p>
+        </div>
       </main>
     )
   }
 
   return (
     <main className="public-menu">
+      <style>{publicMenuStyles}</style>
+
       <header className="public-menu-header">
-        {restaurant.logo_url && (
-          <img
-            src={restaurant.logo_url}
-            alt={`Logo de ${restaurant.name}`}
-            className="public-menu-logo"
-          />
-        )}
+        <div className="pm-header-content">
+          {restaurant.logo_url ? (
+            <img
+              src={restaurant.logo_url}
+              alt={`Logo de ${restaurant.name}`}
+              className="public-menu-logo"
+            />
+          ) : (
+            <div className="pm-logo-placeholder">🍴</div>
+          )}
 
-        <h1>{restaurant.name}</h1>
+          <div className="pm-header-text">
+            <span className="pm-eyebrow">
+              BEM-VINDO AO NOSSO CARDÁPIO
+            </span>
 
-        {restaurant.description && <p>{restaurant.description}</p>}
-        {restaurant.phone && <p>WhatsApp: {restaurant.phone}</p>}
-        {restaurant.address && <p>Endereço: {restaurant.address}</p>}
+            <h1>{restaurant.name}</h1>
 
-        <span className={isStoreOpen ? 'public-status open' : 'public-status closed'}>
-          {isStoreOpen ? 'Aberto agora' : 'Fechado agora'}
-        </span>
+            {restaurant.description && (
+              <p className="pm-description">
+                {restaurant.description}
+              </p>
+            )}
+
+            <div className="pm-restaurant-details">
+              {restaurant.phone && (
+                <span>☎ {restaurant.phone}</span>
+              )}
+
+              {restaurant.address && (
+                <span>📍 {restaurant.address}</span>
+              )}
+            </div>
+
+            <span
+              className={
+                isStoreOpen
+                  ? 'public-status open'
+                  : 'public-status closed'
+              }
+            >
+              <span className="pm-status-dot" />
+              {isStoreOpen ? 'Aberto agora' : 'Fechado agora'}
+            </span>
+          </div>
+        </div>
       </header>
 
       {!isStoreOpen && (
-        <div
-          role="status"
-          style={{
-            background: '#fff0e8',
-            color: '#a64216',
-            padding: 15,
-            borderRadius: 10,
-            textAlign: 'center',
-            margin: '15px 0',
-          }}
-        >
-          <strong>Estamos fechados no momento.</strong>
-          <p style={{ marginBottom: 0 }}>
-            Você poderá fazer seu pedido quando a loja abrir novamente.
-          </p>
+        <div className="pm-closed-notice" role="status">
+          <span>⏰</span>
+          <div>
+            <strong>Estamos fechados no momento.</strong>
+            <p>
+              Você poderá fazer seu pedido quando a loja abrir novamente.
+            </p>
+          </div>
         </div>
       )}
 
+      {/* Carrinho fixo */}
       <div className="public-cart-top">
         <button
           type="button"
@@ -599,120 +666,130 @@ export default function PublicMenu({
           onClick={() => setCartOpen((open) => !open)}
           aria-expanded={cartOpen}
         >
-          <span>🛒</span>
-          <span>Meu pedido</span>
+          <span className="pm-cart-icon">🛒</span>
+          <span className="pm-cart-label">Meu pedido</span>
           <span className="public-cart-count">{cartCount}</span>
           <strong>{formatPrice(cartTotal)}</strong>
+          <span className="pm-cart-chevron">
+            {cartOpen ? '⌃' : '⌄'}
+          </span>
         </button>
       </div>
 
+      {/* Conteúdo do carrinho */}
       {cartOpen && (
         <section className="public-cart">
-          <h2>Meu pedido</h2>
+          <div className="pm-cart-heading">
+            <div>
+              <span className="pm-section-eyebrow">SEU PEDIDO</span>
+              <h2>Meu carrinho</h2>
+            </div>
+
+            <button
+              type="button"
+              className="pm-close-cart"
+              onClick={() => setCartOpen(false)}
+              aria-label="Fechar carrinho"
+            >
+              ×
+            </button>
+          </div>
 
           {cart.length === 0 ? (
-            <p>Seu carrinho está vazio.</p>
+            <div className="pm-empty-cart">
+              <span>🛍️</span>
+              <strong>Seu carrinho está vazio</strong>
+              <p>Escolha seus produtos favoritos no cardápio.</p>
+            </div>
           ) : (
             <>
-              {cart.map((item) => (
-                <div className="public-cart-item" key={item.product.id}>
-                  <div className="public-cart-product">
-                    <strong>{item.product.name}</strong>
-                    <span>
-                      {formatPrice(Number(item.product.price) * item.quantity)}
-                    </span>
+              <div className="pm-cart-items">
+                {cart.map((item) => (
+                  <div
+                    className="public-cart-item"
+                    key={item.product.id}
+                  >
+                    <div className="public-cart-product">
+                      <strong>{item.product.name}</strong>
+                      <span>
+                        {formatPrice(
+                          Number(item.product.price) * item.quantity
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="public-cart-controls">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          decreaseQuantity(item.product.id)
+                        }
+                        aria-label={`Diminuir ${item.product.name}`}
+                      >
+                        −
+                      </button>
+
+                      <span>{item.quantity}</span>
+
+                      <button
+                        type="button"
+                        onClick={() => addToCart(item.product)}
+                        disabled={!isStoreOpen}
+                        aria-label={`Aumentar ${item.product.name}`}
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
-
-                  <div className="public-cart-controls">
-                    <button
-                      type="button"
-                      onClick={() => decreaseQuantity(item.product.id)}
-                      aria-label={`Diminuir ${item.product.name}`}
-                    >
-                      −
-                    </button>
-
-                    <span>{item.quantity}</span>
-
-                    <button
-                      type="button"
-                      onClick={() => addToCart(item.product)}
-                      disabled={!isStoreOpen}
-                      aria-label={`Aumentar ${item.product.name}`}
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
 
               <div className="public-checkout">
                 {!tableToken ? (
                   <>
                     <h3>Como deseja receber seu pedido?</h3>
 
-                    <div
-                      style={{
-                        display: 'flex',
-                        gap: 10,
-                        flexWrap: 'wrap',
-                        marginBottom: 18,
-                      }}
-                    >
+                    <div className="pm-order-types">
                       <button
                         type="button"
+                        className={
+                          orderType === 'delivery'
+                            ? 'pm-type-active'
+                            : ''
+                        }
                         onClick={() => {
                           setOrderType('delivery')
                           setOrderError('')
                         }}
-                        style={{
-                          padding: '12px 18px',
-                          borderRadius: 8,
-                          border: orderType === 'delivery'
-                            ? '2px solid #16a34a'
-                            : '1px solid #ccc',
-                          background: orderType === 'delivery' ? '#ecfdf5' : '#fff',
-                          color: '#222',
-                          cursor: 'pointer',
-                        }}
                       >
-                        🛵 Entrega
+                        <span>🛵</span>
+                        Entrega
                       </button>
 
                       <button
                         type="button"
+                        className={
+                          orderType === 'pickup'
+                            ? 'pm-type-active'
+                            : ''
+                        }
                         onClick={() => {
                           setOrderType('pickup')
                           setNeighborhoodInput('')
                           setOrderError('')
                         }}
-                        style={{
-                          padding: '12px 18px',
-                          borderRadius: 8,
-                          border: orderType === 'pickup'
-                            ? '2px solid #16a34a'
-                            : '1px solid #ccc',
-                          background: orderType === 'pickup' ? '#ecfdf5' : '#fff',
-                          color: '#222',
-                          cursor: 'pointer',
-                        }}
                       >
-                        🏪 Retirada no local
+                        <span>🏪</span>
+                        Retirada
                       </button>
                     </div>
                   </>
                 ) : (
-                  <div
-                    style={{
-                      padding: 14,
-                      background: '#ecfdf5',
-                      borderRadius: 10,
-                      marginBottom: 18,
-                    }}
-                  >
+                  <div className="pm-table-notice">
                     <strong>🍽️ Pedido na mesa</strong>
                     <p>
-                      Seu pedido será enviado diretamente para a equipe do restaurante.
+                      Seu pedido será enviado diretamente para a equipe
+                      do restaurante.
                     </p>
                   </div>
                 )}
@@ -720,33 +797,20 @@ export default function PublicMenu({
                 {!tableToken && orderType === 'delivery' && (
                   <>
                     {requiresGps ? (
-                      <div
-                        style={{
-                          padding: 12,
-                          background: '#eff6ff',
-                          borderRadius: 8,
-                          marginBottom: 14,
-                          color: '#1e40af',
-                          fontSize: 13,
-                        }}
-                      >
-                        Este restaurante utiliza validação por GPS.
-                        Será necessário permitir o acesso à localização
-                        para confirmar a entrega.
+                      <div className="pm-info-box pm-gps-info">
+                        <strong>📍 Entrega com validação GPS</strong>
+                        <p>
+                          Será necessário permitir o acesso à localização
+                          para confirmar a entrega.
+                        </p>
                       </div>
                     ) : (
-                      <div
-                        style={{
-                          padding: 12,
-                          background: '#f0fdf4',
-                          borderRadius: 8,
-                          marginBottom: 14,
-                          color: '#166534',
-                          fontSize: 13,
-                        }}
-                      >
-                        Informe seu bairro cadastrado. Não é necessário
-                        compartilhar sua localização GPS.
+                      <div className="pm-info-box pm-simple-info">
+                        <strong>✓ Entrega por bairro</strong>
+                        <p>
+                          Informe seu bairro cadastrado. Não é necessário
+                          compartilhar sua localização GPS.
+                        </p>
                       </div>
                     )}
 
@@ -756,22 +820,13 @@ export default function PublicMenu({
 
                     <textarea
                       id="delivery-address"
-                      placeholder="Rua, número e complemento"
+                      placeholder="Rua, número, complemento, bairro e cidade"
                       value={deliveryAddress}
                       onChange={(e) => {
                         setDeliveryAddress(e.target.value)
                         setOrderError('')
                       }}
                       rows={3}
-                      style={{
-                        display: 'block',
-                        width: '100%',
-                        padding: 12,
-                        marginBottom: 16,
-                        borderRadius: 8,
-                        border: '1px solid #ccc',
-                        boxSizing: 'border-box',
-                      }}
                     />
 
                     <label htmlFor="delivery-neighborhood">
@@ -788,33 +843,27 @@ export default function PublicMenu({
                         setOrderError('')
                       }}
                       autoComplete="off"
-                      style={{
-                        display: 'block',
-                        width: '100%',
-                        padding: 12,
-                        marginBottom: 16,
-                        borderRadius: 8,
-                        border: '1px solid #ccc',
-                        boxSizing: 'border-box',
-                      }}
                     />
 
                     {neighborhoods.length === 0 && (
-                      <p role="alert">
-                        Nenhum bairro está disponível para entrega no momento.
-                        Você pode escolher retirada no local.
+                      <p role="alert" className="pm-field-warning">
+                        Nenhum bairro está disponível para entrega no
+                        momento. Você pode escolher retirada no local.
                       </p>
                     )}
                   </>
                 )}
 
                 {!tableToken && orderType === 'pickup' && (
-                  <p>
+                  <div className="pm-pickup-info">
                     Você deverá retirar seu pedido no endereço da loja:
-                    {' '}
-                    <strong>{restaurant.address || restaurant.name}</strong>
-                  </p>
+                    <strong>
+                      {restaurant.address || restaurant.name}
+                    </strong>
+                  </div>
                 )}
+
+                <div className="pm-form-divider" />
 
                 <h3>Seus dados</h3>
 
@@ -827,7 +876,9 @@ export default function PublicMenu({
                   onChange={(e) => setCustomerName(e.target.value)}
                 />
 
-                <label htmlFor="customer-phone">Seu WhatsApp com DDD</label>
+                <label htmlFor="customer-phone">
+                  Seu WhatsApp com DDD
+                </label>
                 <input
                   id="customer-phone"
                   type="tel"
@@ -837,16 +888,10 @@ export default function PublicMenu({
                 />
 
                 {!tableToken && (
-                  <div style={{ marginTop: 18, marginBottom: 18 }}>
+                  <div className="pm-payment">
                     <h3>Forma de pagamento</h3>
 
-                    <div
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 10,
-                      }}
-                    >
+                    <div className="pm-payment-options">
                       <label>
                         <input
                           type="radio"
@@ -855,7 +900,7 @@ export default function PublicMenu({
                           checked={paymentMethod === 'pix'}
                           onChange={() => setPaymentMethod('pix')}
                         />
-                        {' '} PIX
+                        <span>PIX</span>
                       </label>
 
                       <label>
@@ -866,7 +911,7 @@ export default function PublicMenu({
                           checked={paymentMethod === 'cash'}
                           onChange={() => setPaymentMethod('cash')}
                         />
-                        {' '} Dinheiro
+                        <span>Dinheiro</span>
                       </label>
 
                       <label>
@@ -877,35 +922,37 @@ export default function PublicMenu({
                           checked={paymentMethod === 'card'}
                           onChange={() => setPaymentMethod('card')}
                         />
-                        {' '} Cartão
+                        <span>Cartão</span>
                       </label>
                     </div>
                   </div>
                 )}
 
-                <div className="public-cart-total">
-                  <span>Subtotal</span>
-                  <strong>{formatPrice(cartTotal)}</strong>
-                </div>
+                <div className="pm-total-box">
+                  <div className="public-cart-total">
+                    <span>Subtotal</span>
+                    <strong>{formatPrice(cartTotal)}</strong>
+                  </div>
 
-                <div className="public-cart-total">
-                  <span>Taxa de entrega</span>
-                  <strong>
-                    {orderType === 'pickup'
-                      ? 'Grátis'
-                      : selectedNeighborhood
-                        ? formatDeliveryFee(deliveryFee)
-                        : 'Informe um bairro válido'}
-                  </strong>
-                </div>
+                  <div className="public-cart-total">
+                    <span>Taxa de entrega</span>
+                    <strong>
+                      {orderType === 'pickup'
+                        ? 'Grátis'
+                        : selectedNeighborhood
+                          ? formatDeliveryFee(deliveryFee)
+                          : 'Informe um bairro válido'}
+                    </strong>
+                  </div>
 
-                <div className="public-cart-total">
-                  <span>Total do pedido</span>
-                  <strong>
-                    {orderType === 'pickup' || selectedNeighborhood
-                      ? formatPrice(finalTotal)
-                      : '—'}
-                  </strong>
+                  <div className="public-cart-total pm-grand-total">
+                    <span>Total do pedido</span>
+                    <strong>
+                      {orderType === 'pickup' || selectedNeighborhood
+                        ? formatPrice(finalTotal)
+                        : '—'}
+                    </strong>
+                  </div>
                 </div>
 
                 {orderError && (
@@ -940,13 +987,27 @@ export default function PublicMenu({
         </section>
       )}
 
+      {/* Cardápio */}
       <section className="public-menu-content">
-        <h2>Nosso cardápio</h2>
+        <div className="pm-menu-heading">
+          <div>
+            <span className="pm-section-eyebrow">
+              FEITO COM CARINHO
+            </span>
+            <h2>Nosso cardápio</h2>
+            <p>Escolha seus favoritos e faça seu pedido.</p>
+          </div>
 
+          <span className="pm-menu-decoration">✦</span>
+        </div>
+
+        {/* Categorias */}
         <div className="public-category-filters">
           <button
             type="button"
-            className={selectedCategory === 'all' ? 'selected' : ''}
+            className={
+              selectedCategory === 'all' ? 'selected' : ''
+            }
             onClick={() => setSelectedCategory('all')}
           >
             Todos
@@ -956,7 +1017,9 @@ export default function PublicMenu({
             <button
               type="button"
               key={category.id}
-              className={selectedCategory === category.id ? 'selected' : ''}
+              className={
+                selectedCategory === category.id ? 'selected' : ''
+              }
               onClick={() => setSelectedCategory(category.id)}
             >
               {category.name}
@@ -966,7 +1029,9 @@ export default function PublicMenu({
           {products.some((product) => !product.category_id) && (
             <button
               type="button"
-              className={selectedCategory === 'none' ? 'selected' : ''}
+              className={
+                selectedCategory === 'none' ? 'selected' : ''
+              }
               onClick={() => setSelectedCategory('none')}
             >
               Outros
@@ -974,35 +1039,56 @@ export default function PublicMenu({
           )}
         </div>
 
+        {/* Produtos */}
         {filteredProducts.length === 0 ? (
-          <p className="public-empty">
-            Nenhum produto disponível nesta categoria.
-          </p>
+          <div className="public-empty">
+            <span>🍽️</span>
+            <p>Nenhum produto disponível nesta categoria.</p>
+          </div>
         ) : (
           <div className="public-products-grid">
             {filteredProducts.map((product) => (
-              <article className="public-product-card" key={product.id}>
-                {product.image_url ? (
-                  <img src={product.image_url} alt={product.name} />
-                ) : (
-                  <div className="public-product-placeholder">
-                    Sem imagem
-                  </div>
-                )}
+              <article
+                className="public-product-card"
+                key={product.id}
+              >
+                <div className="public-product-image">
+                  {product.image_url ? (
+                    <img
+                      src={product.image_url}
+                      alt={product.name}
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="public-product-placeholder">
+                      <span>🍴</span>
+                      <small>Sem imagem</small>
+                    </div>
+                  )}
+                </div>
 
                 <div className="public-product-info">
-                  <h3>{product.name}</h3>
-                  <p>{product.description || 'Sem descrição'}</p>
-                  <strong>{formatPrice(product.price)}</strong>
+                  <div>
+                    <h3>{product.name}</h3>
 
-                  <button
-                    type="button"
-                    className="add-cart-button"
-                    onClick={() => addToCart(product)}
-                    disabled={!isStoreOpen}
-                  >
-                    {isStoreOpen ? '+ Adicionar' : 'Loja fechada'}
-                  </button>
+                    {product.description && (
+                      <p>{product.description}</p>
+                    )}
+                  </div>
+
+                  <div className="pm-product-bottom">
+                    <strong>{formatPrice(product.price)}</strong>
+
+                    <button
+                      type="button"
+                      className="add-cart-button"
+                      onClick={() => addToCart(product)}
+                      disabled={!isStoreOpen}
+                      aria-label={`Adicionar ${product.name} ao carrinho`}
+                    >
+                      {isStoreOpen ? '+' : 'Fechado'}
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}
@@ -1011,8 +1097,783 @@ export default function PublicMenu({
       </section>
 
       <footer className="public-menu-footer">
-        Cardápio digital criado com MenuFlow
+        <span>✦</span>
+        Cardápio digital criado com <strong>MenuFlow</strong>
       </footer>
     </main>
   )
 }
+
+const publicMenuStyles = `
+  .public-menu {
+    --pm-green: #174d38;
+    --pm-green-dark: #103b2b;
+    --pm-green-light: #eaf3ed;
+    --pm-gold: #d5a64b;
+    --pm-cream: #faf8f3;
+    --pm-text: #262d29;
+    --pm-muted: #777e78;
+
+    min-height: 100vh;
+    padding-bottom: 105px;
+    background: var(--pm-cream);
+    color: var(--pm-text);
+    font-family: Arial, Helvetica, sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  /* Cabeçalho */
+  .public-menu-header {
+    padding: 35px 20px;
+    background: var(--pm-green);
+    color: white;
+  }
+
+  .pm-header-content {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    width: min(100%, 1050px);
+    margin: auto;
+  }
+
+  .public-menu-logo,
+  .pm-logo-placeholder {
+    width: 105px;
+    height: 105px;
+    min-width: 105px;
+    border-radius: 16px;
+    object-fit: cover;
+    background: white;
+  }
+
+  .pm-logo-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 40px;
+  }
+
+  .pm-header-text {
+    min-width: 0;
+  }
+
+  .pm-eyebrow {
+    color: #d9e9dd;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+  }
+
+  .pm-header-text h1 {
+    margin: 7px 0;
+    font-size: 29px;
+  }
+
+  .pm-description {
+    margin: 5px 0;
+    color: #e0ebe3;
+    font-size: 14px;
+  }
+
+  .pm-restaurant-details {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 12px 0;
+    color: #e0ebe3;
+    font-size: 13px;
+  }
+
+  .public-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 11px;
+    border-radius: 20px;
+    background: rgba(255,255,255,.13);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .pm-status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #8be0a6;
+  }
+
+  .public-status.closed .pm-status-dot {
+    background: #ffb2a8;
+  }
+
+  .pm-closed-notice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: min(calc(100% - 32px), 1050px);
+    margin: 20px auto;
+    padding: 15px;
+    border-radius: 12px;
+    background: #fff3e6;
+    color: #865321;
+  }
+
+  .pm-closed-notice p {
+    margin: 4px 0 0;
+    font-size: 13px;
+  }
+
+  /* Área do cardápio */
+  .public-menu-content {
+    width: min(calc(100% - 32px), 1050px);
+    margin: 35px auto;
+  }
+
+  .pm-menu-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 22px;
+  }
+
+  .pm-section-eyebrow {
+    color: #668573;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
+  }
+
+  .pm-menu-heading h2 {
+    margin: 6px 0;
+    color: var(--pm-green);
+    font-size: 27px;
+  }
+
+  .pm-menu-heading p {
+    margin: 0;
+    color: var(--pm-muted);
+    font-size: 14px;
+  }
+
+  .pm-menu-decoration {
+    color: var(--pm-gold);
+    font-size: 35px;
+  }
+
+  /* Categorias */
+  .public-category-filters {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding: 5px 0 18px;
+    margin-bottom: 12px;
+    scrollbar-width: thin;
+  }
+
+  .public-category-filters button {
+    flex-shrink: 0;
+    padding: 10px 19px;
+    border: 1px solid #dce8df;
+    border-radius: 30px;
+    background: white;
+    color: #315b45;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .public-category-filters button.selected {
+    border-color: var(--pm-green);
+    background: var(--pm-green);
+    color: white;
+  }
+
+  /* Lista de produtos */
+  .public-products-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 13px;
+  }
+
+  .public-product-card {
+    display: flex;
+    align-items: stretch;
+    gap: 15px;
+    width: 100%;
+    min-height: 145px;
+    padding: 12px;
+    border: 1px solid #edf0eb;
+    border-radius: 15px;
+    background: white;
+    box-shadow: 0 2px 9px rgba(25,55,38,.045);
+    transition: box-shadow .2s, transform .2s;
+  }
+
+  .public-product-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 5px 17px rgba(25,55,38,.09);
+  }
+
+  .public-product-image {
+    width: 132px;
+    min-width: 132px;
+    height: 125px;
+    overflow: hidden;
+    border-radius: 11px;
+    background: #f1f4ef;
+  }
+
+  .public-product-image img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .public-product-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    gap: 5px;
+    color: #849487;
+  }
+
+  .public-product-placeholder span {
+    font-size: 32px;
+  }
+
+  .public-product-placeholder small {
+    font-size: 11px;
+  }
+
+  .public-product-info {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 3px 1px;
+  }
+
+  .public-product-info h3 {
+    margin: 0 0 6px;
+    color: #26352c;
+    font-size: 16px;
+    line-height: 1.3;
+    font-weight: 800;
+  }
+
+  .public-product-info p {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    margin: 0;
+    color: #7b837d;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .pm-product-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .pm-product-bottom strong {
+    color: var(--pm-green);
+    font-size: 17px;
+    font-weight: 800;
+  }
+
+  .add-cart-button {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--pm-green);
+    color: white;
+    font-size: 25px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background .2s, transform .2s;
+  }
+
+  .add-cart-button:hover:not(:disabled) {
+    transform: scale(1.06);
+    background: var(--pm-green-dark);
+  }
+
+  .add-cart-button:disabled {
+    width: auto;
+    min-width: 58px;
+    padding: 0 9px;
+    border-radius: 20px;
+    background: #aab5ac;
+    font-size: 10px;
+    cursor: not-allowed;
+  }
+
+  .public-empty {
+    padding: 45px 20px;
+    border-radius: 15px;
+    background: white;
+    color: var(--pm-muted);
+    text-align: center;
+  }
+
+  .public-empty span {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 35px;
+  }
+
+  /* Carrinho fixo */
+  .public-cart-top {
+    position: fixed;
+    z-index: 50;
+    bottom: 16px;
+    left: 50%;
+    width: min(520px, calc(100% - 24px));
+    margin: 0;
+    padding: 0;
+    transform: translateX(-50%);
+  }
+
+  .public-cart-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    min-height: 56px;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 14px;
+    background: var(--pm-green);
+    color: white;
+    box-shadow: 0 10px 35px rgba(16,59,43,.2);
+    cursor: pointer;
+  }
+
+  .pm-cart-label {
+    font-weight: 700;
+  }
+
+  .public-cart-count {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 23px;
+    height: 23px;
+    border-radius: 50%;
+    background: white;
+    color: var(--pm-green);
+    font-size: 12px;
+    font-weight: 800;
+  }
+
+  /* Painel do carrinho */
+  .public-cart {
+    position: fixed;
+    z-index: 60;
+    top: 16px;
+    right: 16px;
+    bottom: 16px;
+    width: min(440px, calc(100vw - 32px));
+    max-width: none;
+    margin: 0;
+    padding: 20px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    border: 1px solid #dce8df;
+    border-radius: 18px;
+    background: white;
+    box-shadow: 0 18px 60px rgba(16,59,43,.25);
+  }
+
+  .pm-cart-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+
+  .pm-cart-heading h2 {
+    margin: 5px 0 0;
+    color: var(--pm-green);
+  }
+
+  .pm-close-cart {
+    width: 35px;
+    height: 35px;
+    border: 0;
+    border-radius: 50%;
+    background: #edf3ee;
+    font-size: 24px;
+    cursor: pointer;
+  }
+
+  .pm-empty-cart {
+    padding: 25px 10px;
+    color: #737c75;
+    text-align: center;
+  }
+
+  .pm-empty-cart span {
+    display: block;
+    margin-bottom: 10px;
+    font-size: 35px;
+  }
+
+  .pm-empty-cart p {
+    font-size: 13px;
+  }
+
+  .pm-cart-items {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .public-cart-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid #edf0eb;
+  }
+
+  .public-cart-product {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .public-cart-product strong {
+    font-size: 13px;
+  }
+
+  .public-cart-product span {
+    color: var(--pm-green);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .public-cart-controls {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .public-cart-controls button {
+    width: 29px;
+    height: 29px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--pm-green-light);
+    color: var(--pm-green);
+    font-size: 19px;
+    cursor: pointer;
+  }
+
+  /* Checkout */
+  .public-checkout {
+    display: flex;
+    flex-direction: column;
+    gap: 11px;
+    margin-top: 22px;
+  }
+
+  .public-checkout h3 {
+    margin: 8px 0;
+    color: var(--pm-green);
+    font-size: 16px;
+  }
+
+  .public-checkout label {
+    color: #39463d;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .public-checkout input:not([type="radio"]),
+  .public-checkout textarea {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid #dce5dd;
+    border-radius: 9px;
+    background: white;
+    font: inherit;
+    font-size: 14px;
+  }
+
+  .public-checkout textarea {
+    resize: vertical;
+  }
+
+  .pm-order-types,
+  .pm-payment-options {
+    display: flex;
+    gap: 9px;
+  }
+
+  .pm-order-types button {
+    flex: 1;
+    padding: 12px 8px;
+    border: 1px solid #dce5dd;
+    border-radius: 10px;
+    background: white;
+    color: #315b45;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .pm-order-types button.pm-type-active {
+    border-color: var(--pm-green);
+    background: var(--pm-green-light);
+    color: var(--pm-green);
+  }
+
+  .pm-info-box,
+  .pm-table-notice,
+  .pm-pickup-info {
+    padding: 13px;
+    border-radius: 10px;
+    background: #f0f5f0;
+    color: #315b45;
+    font-size: 13px;
+  }
+
+  .pm-info-box p,
+  .pm-table-notice p {
+    margin: 5px 0 0;
+  }
+
+  .pm-pickup-info strong {
+    display: block;
+    margin-top: 7px;
+  }
+
+  .pm-field-warning,
+  .public-checkout-error {
+    color: #b23a32;
+    font-size: 13px;
+  }
+
+  .pm-form-divider {
+    height: 1px;
+    margin: 12px 0;
+    background: #e7ece7;
+  }
+
+  .pm-payment-options {
+    flex-wrap: wrap;
+  }
+
+  .pm-payment-options label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 9px;
+    border: 1px solid #e0e8e1;
+    border-radius: 8px;
+  }
+
+  .pm-total-box {
+    padding: 14px;
+    border-radius: 10px;
+    background: #f5f8f5;
+  }
+
+  .public-cart-total {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin: 8px 0;
+    font-size: 13px;
+  }
+
+  .pm-grand-total {
+    padding-top: 10px;
+    border-top: 1px solid #dce5dd;
+    color: var(--pm-green);
+    font-size: 16px;
+    font-weight: 800;
+  }
+
+  .public-whatsapp-button {
+    width: 100%;
+    padding: 15px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--pm-green);
+    color: white;
+    font-size: 15px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .public-whatsapp-button:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+  }
+
+  /* Carregamento e erro */
+  .pm-loading,
+  .pm-error-page {
+    display: flex;
+    min-height: 75vh;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 25px;
+    text-align: center;
+  }
+
+  .pm-loader {
+    width: 38px;
+    height: 38px;
+    border: 4px solid #dce8df;
+    border-top-color: var(--pm-green);
+    border-radius: 50%;
+    animation: pm-spin .8s linear infinite;
+  }
+
+  @keyframes pm-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .pm-error-page > span {
+    font-size: 45px;
+  }
+
+  .pm-error-page h1 {
+    margin: 0;
+    color: var(--pm-green);
+  }
+
+  .pm-error-page p {
+    color: var(--pm-muted);
+  }
+
+  /* Rodapé */
+  .public-menu-footer {
+    padding: 30px 15px;
+    color: #858d86;
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .public-menu-footer span {
+    color: var(--pm-gold);
+  }
+
+  /* Celulares */
+  @media (max-width: 600px) {
+    .public-menu-header {
+      padding: 25px 16px;
+    }
+
+    .pm-header-content {
+      align-items: flex-start;
+      gap: 14px;
+    }
+
+    .public-menu-logo,
+    .pm-logo-placeholder {
+      width: 75px;
+      height: 75px;
+      min-width: 75px;
+    }
+
+    .pm-header-text h1 {
+      font-size: 21px;
+    }
+
+    .pm-restaurant-details {
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .public-menu-content {
+      width: calc(100% - 24px);
+      margin: 25px auto;
+    }
+
+    .public-product-card {
+      min-height: 120px;
+      gap: 11px;
+      padding: 9px;
+    }
+
+    .public-product-image {
+      width: 112px;
+      min-width: 112px;
+      height: 112px;
+    }
+
+    .public-product-info h3 {
+      font-size: 14px;
+    }
+
+    .public-product-info p {
+      font-size: 11px;
+    }
+
+    .pm-product-bottom {
+      margin-top: 8px;
+    }
+
+    .pm-product-bottom strong {
+      font-size: 15px;
+    }
+
+    .add-cart-button {
+      width: 34px;
+      height: 34px;
+    }
+
+    .public-cart-top {
+      bottom: 12px;
+      width: calc(100% - 24px);
+    }
+
+    .public-cart {
+      top: auto;
+      right: 10px;
+      bottom: 10px;
+      left: 10px;
+      width: auto;
+      max-height: 86dvh;
+      padding: 17px;
+    }
+  }
+
+  /* Computadores e tablets maiores */
+  @media (min-width: 850px) {
+    .public-products-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+`

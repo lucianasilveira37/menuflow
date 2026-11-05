@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { supabase } from '../lib/supabase'
 
 type Restaurant = {
@@ -53,6 +54,8 @@ function getCategoryEmoji(name: string) {
 }
 
 export default function RestaurantesPage() {
+  const router = useRouter()
+
   const [restaurants, setRestaurants] = useState<Restaurant[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [globalCategories, setGlobalCategories] = useState<GlobalCategory[]>([])
@@ -63,19 +66,87 @@ export default function RestaurantesPage() {
   const [selectedCategory, setSelectedCategory] = useState('')
 
   const [loading, setLoading] = useState(true)
+  const [authLoading, setAuthLoading] = useState(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [locating, setLocating] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
 
   useEffect(() => {
-    loadData()
-  }, [])
+    let active = true
+
+    async function verifyAuthentication() {
+      try {
+        const { data, error } = await supabase.auth.getUser()
+
+        if (!active) return
+
+        if (error || !data.user) {
+          setIsAuthenticated(false)
+          setAuthLoading(false)
+          router.replace('/')
+          return
+        }
+
+        setIsAuthenticated(true)
+        setAuthLoading(false)
+      } catch (err) {
+        console.error('Erro ao verificar autenticação:', err)
+
+        if (active) {
+          setIsAuthenticated(false)
+          setAuthLoading(false)
+          router.replace('/')
+        }
+      }
+    }
+
+    verifyAuthentication()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!active) return
+
+      if (!session?.user) {
+        setIsAuthenticated(false)
+        setRestaurants([])
+        setCategories([])
+        setGlobalCategories([])
+        setAuthLoading(false)
+        router.replace('/')
+      } else {
+        setIsAuthenticated(true)
+        setAuthLoading(false)
+      }
+    })
+
+    return () => {
+      active = false
+      subscription.unsubscribe()
+    }
+  }, [router])
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      loadData()
+    }
+  }, [isAuthenticated])
 
   async function loadData() {
     setLoading(true)
     setError('')
 
     try {
+      const { data: userData, error: userError } =
+        await supabase.auth.getUser()
+
+      if (userError || !userData.user) {
+        setIsAuthenticated(false)
+        router.replace('/')
+        return
+      }
+
       const [
         restaurantsResult,
         categoriesResult,
@@ -83,7 +154,9 @@ export default function RestaurantesPage() {
       ] = await Promise.all([
         supabase
           .from('restaurants')
-          .select('id, name, slug, description, phone, address, logo_url, city, state')
+          .select(
+            'id, name, slug, description, phone, address, logo_url, city, state'
+          )
           .order('name'),
 
         supabase
@@ -118,7 +191,9 @@ export default function RestaurantesPage() {
     setMessage('')
 
     if (!navigator.geolocation) {
-      setMessage('Seu navegador não oferece suporte à localização. Informe sua cidade manualmente.')
+      setMessage(
+        'Seu navegador não oferece suporte à localização. Informe sua cidade manualmente.'
+      )
       return
     }
 
@@ -141,19 +216,27 @@ export default function RestaurantesPage() {
           if (data.state) setState(data.state)
 
           if (data.city) {
-            setMessage('Localização identificada! Confira os dados e veja os restaurantes.')
+            setMessage(
+              'Localização identificada! Confira os dados e veja os restaurantes.'
+            )
           } else {
-            setMessage('Não encontramos sua cidade. Você pode informá-la manualmente.')
+            setMessage(
+              'Não encontramos sua cidade. Você pode informá-la manualmente.'
+            )
           }
         } catch {
-          setMessage('A identificação automática ainda não está disponível. Informe sua cidade manualmente.')
+          setMessage(
+            'A identificação automática ainda não está disponível. Informe sua cidade manualmente.'
+          )
         } finally {
           setLocating(false)
         }
       },
       () => {
         setLocating(false)
-        setMessage('Localização não autorizada ou indisponível. Informe sua cidade manualmente.')
+        setMessage(
+          'Localização não autorizada ou indisponível. Informe sua cidade manualmente.'
+        )
       },
       {
         enableHighAccuracy: false,
@@ -195,76 +278,107 @@ export default function RestaurantesPage() {
           category.name.toLowerCase().includes(normalizedSearch)
         )
 
-      return matchesCity && matchesState && matchesCategory && matchesSearch
+      return (
+        matchesCity &&
+        matchesState &&
+        matchesCategory &&
+        matchesSearch
+      )
     })
   }, [restaurants, categories, city, state, search, selectedCategory])
 
+  if (authLoading) {
+    return (
+      <main className="min-h-screen bg-[#f7f8f5] flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-3">🍽️</div>
+          <p className="text-gray-600 font-semibold">
+            Verificando seu acesso...
+          </p>
+        </div>
+      </main>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return null
+  }
+
   return (
-    <main className="min-h-screen bg-[#FAF8F5] text-gray-900">
+    <main className="min-h-screen bg-[#f7f8f5] text-gray-900">
 
       {/* CABEÇALHO */}
-      <header className="bg-white border-b border-gray-100">
+      <header className="sticky top-0 z-30 bg-white border-b border-gray-100">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+
           <Link href="/restaurantes" className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-orange-600 flex items-center justify-center text-white text-xl">
+            <div className="w-10 h-10 rounded-xl bg-[#1d5b3b] flex items-center justify-center text-white text-xl">
               🍽️
             </div>
+
             <span className="text-2xl font-black tracking-tight text-gray-900">
-              Menu<span className="text-orange-600">Flow</span>
+              Menu<span className="text-[#d49a35]">Flow</span>
             </span>
           </Link>
 
-          <Link
-            href="/"
-            className="text-sm font-semibold text-gray-600 hover:text-orange-600 transition"
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut()
+              router.replace('/')
+            }}
+            className="text-sm font-semibold text-gray-600 hover:text-[#1d5b3b] transition"
           >
-            Entrar na minha conta
-          </Link>
+            Sair da conta
+          </button>
         </div>
       </header>
 
-      {/* BANNER PRINCIPAL */}
-      <section className="relative overflow-hidden bg-gradient-to-br from-orange-600 via-orange-500 to-amber-500">
-        <div className="absolute -right-20 -top-24 w-80 h-80 rounded-full bg-white/10" />
-        <div className="absolute right-1/4 -bottom-40 w-96 h-96 rounded-full bg-white/10" />
+      {/* APRESENTAÇÃO */}
+      <section className="bg-white border-b border-gray-100">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-9 md:py-12">
 
-        <div className="relative max-w-7xl mx-auto px-5 sm:px-8 py-12 md:py-16">
           <div className="max-w-2xl">
-            <span className="inline-flex items-center gap-2 bg-white/20 text-white rounded-full px-4 py-2 text-xs font-bold mb-5">
-              ✨ SEU PRÓXIMO PEDIDO COMEÇA AQUI
+            <span className="inline-flex items-center rounded-full bg-[#eaf2eb] text-[#286344] px-3 py-1.5 text-xs font-bold mb-4">
+              SUA EXPERIÊNCIA GASTRONÔMICA
             </span>
 
-            <h1 className="text-4xl md:text-5xl font-black text-white leading-tight">
-              A fome chegou?
+            <h1 className="text-3xl md:text-4xl font-black tracking-tight text-gray-900">
+              Peça o que você ama.
               <br />
-              Peça algo delicioso!
+              <span className="text-[#1d5b3b]">
+                Descubra novos sabores.
+              </span>
             </h1>
 
-            <p className="text-orange-50 mt-4 text-base md:text-lg max-w-lg">
-              Descubra restaurantes, explore sabores e encontre seu próximo prato favorito.
+            <p className="text-gray-500 mt-3 text-sm md:text-base">
+              Encontre restaurantes, explore cardápios e escolha seu próximo pedido.
             </p>
           </div>
 
-          {/* BUSCA E LOCALIZAÇÃO */}
-          <div className="mt-8 bg-white rounded-2xl shadow-xl p-4 md:p-5 max-w-3xl">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="text-xl">📍</span>
+          {/* LOCALIZAÇÃO */}
+          <div className="mt-7 max-w-3xl rounded-2xl border border-gray-100 bg-[#fafbf9] p-4">
+
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-[#eaf2eb] flex items-center justify-center text-lg">
+                📍
+              </div>
+
               <div>
                 <p className="font-bold text-gray-900 text-sm">
                   Onde você quer pedir?
                 </p>
                 <p className="text-xs text-gray-500">
-                  Escolha sua cidade para encontrar restaurantes.
+                  Informe sua cidade para encontrar opções próximas.
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-[1fr_100px] gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-[1fr_90px] gap-2">
               <input
                 value={city}
                 onChange={(e) => setCity(e.target.value)}
                 placeholder="Digite sua cidade"
-                className="w-full rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                className="w-full rounded-xl bg-white border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#1d5b3b] focus:ring-2 focus:ring-green-100"
               />
 
               <input
@@ -272,17 +386,19 @@ export default function RestaurantesPage() {
                 onChange={(e) => setState(e.target.value.toUpperCase())}
                 placeholder="UF"
                 maxLength={2}
-                className="w-full rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-900 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+                className="w-full rounded-xl bg-white border border-gray-200 px-4 py-3 text-sm outline-none focus:border-[#1d5b3b] focus:ring-2 focus:ring-green-100"
               />
             </div>
 
-            <div className="flex flex-wrap gap-3 mt-3">
+            <div className="flex flex-wrap gap-4 mt-3">
               <button
                 onClick={detectLocation}
                 disabled={locating}
-                className="text-sm font-bold text-orange-700 hover:text-orange-800 disabled:opacity-50"
+                className="text-sm font-bold text-[#1d5b3b] hover:text-green-800 disabled:opacity-50"
               >
-                📍 {locating ? 'Identificando localização...' : 'Usar minha localização'}
+                📍 {locating
+                  ? 'Identificando localização...'
+                  : 'Usar minha localização'}
               </button>
 
               {(city || state) && (
@@ -302,46 +418,57 @@ export default function RestaurantesPage() {
             {message && (
               <p className="mt-3 text-xs text-gray-500">{message}</p>
             )}
-
-            <div className="relative mt-5">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
-                🔎
-              </span>
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar restaurante, pizza, hambúrguer..."
-                className="w-full rounded-xl bg-gray-50 border border-gray-200 pl-11 pr-4 py-4 text-sm text-gray-900 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-              />
-            </div>
           </div>
+
+          {/* BUSCA */}
+          <div className="relative mt-4 max-w-3xl">
+            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 text-lg">
+              🔎
+            </span>
+
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar restaurante, pizza, hambúrguer..."
+              className="w-full rounded-xl bg-white border border-gray-200 pl-11 pr-4 py-4 text-sm outline-none focus:border-[#1d5b3b] focus:ring-2 focus:ring-green-100"
+            />
+          </div>
+
         </div>
       </section>
 
       {/* CATEGORIAS */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-10">
-        <div className="flex items-center justify-between mb-5">
-          <div>
-            <h2 className="text-xl md:text-2xl font-black text-gray-900">
-              Explore por categoria
-            </h2>
-            <p className="text-sm text-gray-500 mt-1">
-              Qual sabor combina com você hoje?
-            </p>
-          </div>
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-9">
+
+        <div className="mb-5">
+          <h2 className="text-xl md:text-2xl font-black text-gray-900">
+            Explore por categoria
+          </h2>
+
+          <p className="text-sm text-gray-500 mt-1">
+            Escolha o tipo de comida que deseja.
+          </p>
         </div>
 
-        <div className="flex gap-3 overflow-x-auto pb-3">
+        <div className="flex gap-5 overflow-x-auto pb-4">
+
           <button
             onClick={() => setSelectedCategory('')}
-            className={`shrink-0 min-w-[88px] rounded-2xl border p-3 flex flex-col items-center gap-2 transition ${
-              selectedCategory === ''
-                ? 'bg-orange-600 border-orange-600 text-white shadow-md'
-                : 'bg-white border-gray-100 text-gray-700 hover:border-orange-300'
-            }`}
+            className="shrink-0 flex flex-col items-center gap-2 group"
           >
-            <span className="text-3xl">🍽️</span>
-            <span className="text-xs font-bold">Todas</span>
+            <div className={`w-[68px] h-[68px] rounded-full flex items-center justify-center text-3xl border-2 transition ${
+              selectedCategory === ''
+                ? 'bg-[#eaf2eb] border-[#1d5b3b]'
+                : 'bg-white border-gray-100 group-hover:border-[#1d5b3b]'
+            }`}>
+              🍽️
+            </div>
+
+            <span className={`text-xs font-bold ${
+              selectedCategory === '' ? 'text-[#1d5b3b]' : 'text-gray-600'
+            }`}>
+              Todas
+            </span>
           </button>
 
           {globalCategories.map((category) => (
@@ -352,63 +479,75 @@ export default function RestaurantesPage() {
                   selectedCategory === category.id ? '' : category.id
                 )
               }
-              className={`shrink-0 min-w-[88px] rounded-2xl border p-3 flex flex-col items-center gap-2 transition ${
-                selectedCategory === category.id
-                  ? 'bg-orange-600 border-orange-600 text-white shadow-md'
-                  : 'bg-white border-gray-100 text-gray-700 hover:border-orange-300'
-              }`}
+              className="shrink-0 flex flex-col items-center gap-2 group"
             >
-              <span className="text-3xl">
+              <div className={`w-[68px] h-[68px] rounded-full flex items-center justify-center text-3xl border-2 transition ${
+                selectedCategory === category.id
+                  ? 'bg-[#eaf2eb] border-[#1d5b3b]'
+                  : 'bg-white border-gray-100 group-hover:border-[#1d5b3b]'
+              }`}>
                 {getCategoryEmoji(category.name)}
-              </span>
-              <span className="text-xs font-bold text-center">
+              </div>
+
+              <span className={`text-xs font-bold max-w-[85px] text-center ${
+                selectedCategory === category.id
+                  ? 'text-[#1d5b3b]'
+                  : 'text-gray-600'
+              }`}>
                 {category.name}
               </span>
             </button>
           ))}
+
         </div>
       </section>
 
       {/* RESTAURANTES */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-9 pb-16">
-        <div className="flex items-end justify-between gap-3 mb-5">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-7 pb-16">
+
+        <div className="flex items-end justify-between gap-3 mb-6">
           <div>
             <h2 className="text-xl md:text-2xl font-black text-gray-900">
-              Restaurantes para você
+              Restaurantes disponíveis
             </h2>
+
             <p className="text-sm text-gray-500 mt-1">
-              Encontre seu próximo pedido.
+              Escolha onde deseja fazer seu pedido.
             </p>
           </div>
 
           {!loading && (
-            <span className="text-xs sm:text-sm font-semibold text-orange-700 bg-orange-50 rounded-full px-3 py-2">
+            <span className="text-xs font-bold text-[#1d5b3b] bg-[#eaf2eb] rounded-full px-3 py-2 whitespace-nowrap">
               {filteredRestaurants.length} encontrado(s)
             </span>
           )}
         </div>
 
+        {/* CARREGAMENTO */}
         {loading && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-5">
-            {[1, 2, 3, 4].map((item) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3, 4, 5, 6].map((item) => (
               <div
                 key={item}
-                className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse"
+                className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-4 animate-pulse"
               >
-                <div className="h-28 sm:h-36 bg-gray-200" />
-                <div className="p-3 space-y-3">
+                <div className="w-20 h-20 rounded-full bg-gray-200 shrink-0" />
+
+                <div className="flex-1 space-y-3">
                   <div className="h-4 bg-gray-200 rounded w-3/4" />
                   <div className="h-3 bg-gray-100 rounded w-full" />
-                  <div className="h-8 bg-gray-200 rounded" />
+                  <div className="h-3 bg-gray-100 rounded w-1/2" />
                 </div>
               </div>
             ))}
           </div>
         )}
 
+        {/* ERRO */}
         {error && (
           <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-5 text-sm">
             {error}
+
             <button
               onClick={loadData}
               className="block mt-3 font-bold underline"
@@ -418,116 +557,124 @@ export default function RestaurantesPage() {
           </div>
         )}
 
+        {/* SEM RESULTADOS */}
         {!loading && !error && filteredRestaurants.length === 0 && (
           <div className="bg-white border border-gray-100 rounded-2xl p-10 text-center">
             <div className="text-5xl mb-4">🔎</div>
+
             <h3 className="font-bold text-lg text-gray-900">
               Nenhum restaurante encontrado
             </h3>
+
             <p className="text-sm text-gray-500 mt-2">
               Tente mudar a cidade, categoria ou busca.
             </p>
+
             <button
               onClick={() => {
                 setSearch('')
                 setSelectedCategory('')
                 setCity('')
                 setState('')
+                setMessage('')
               }}
-              className="mt-5 text-sm font-bold text-orange-600"
+              className="mt-5 text-sm font-bold text-[#1d5b3b]"
             >
               Limpar filtros
             </button>
           </div>
         )}
 
+        {/* LISTA DE RESTAURANTES */}
         {!loading && !error && filteredRestaurants.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+
             {filteredRestaurants.map((restaurant) => {
               const restaurantCategories = categories.filter(
                 (category) => category.restaurant_id === restaurant.id
               )
 
               return (
-                <article
+                <Link
                   key={restaurant.id}
-                  className="group bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm hover:shadow-lg hover:-translate-y-1 transition duration-200 flex flex-col"
+                  href={`/cardapio/${restaurant.slug}`}
+                  className="group bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-4 shadow-sm hover:shadow-md hover:border-[#c8ddcd] transition duration-200"
                 >
-                  <div className="h-28 sm:h-36 bg-gradient-to-br from-orange-50 to-amber-100 flex items-center justify-center overflow-hidden">
+
+                  {/* LOGO REDONDO */}
+                  <div className="w-[82px] h-[82px] sm:w-[92px] sm:h-[92px] shrink-0 rounded-full bg-[#f0f5ef] border border-gray-100 flex items-center justify-center overflow-hidden">
+
                     {restaurant.logo_url ? (
                       <img
                         src={restaurant.logo_url}
                         alt={`Logo ${restaurant.name}`}
-                        className="w-full h-full object-contain p-3 group-hover:scale-105 transition duration-300"
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <span className="text-5xl">🍽️</span>
-                      </div>
+                      <span className="text-4xl">🍽️</span>
                     )}
+
                   </div>
 
-                  <div className="p-3 sm:p-4 flex flex-col flex-1">
-                    <h3 className="font-extrabold text-sm sm:text-base text-gray-900 leading-tight line-clamp-1">
+                  {/* INFORMAÇÕES */}
+                  <div className="flex-1 min-w-0">
+
+                    <h3 className="font-extrabold text-base sm:text-lg text-gray-900 leading-tight truncate group-hover:text-[#1d5b3b] transition">
                       {restaurant.name}
                     </h3>
 
-                    {restaurant.description && (
-                      <p className="text-xs text-gray-500 mt-1 line-clamp-2 min-h-[2rem]">
-                        {restaurant.description}
-                      </p>
-                    )}
+                    <p className="text-xs sm:text-sm text-gray-500 mt-1 line-clamp-2 min-h-[2rem]">
+                      {restaurant.description || 'Conheça nosso cardápio e escolha seu pedido favorito.'}
+                    </p>
 
                     {(restaurant.city || restaurant.state) && (
-                      <p className="text-[11px] text-gray-400 mt-2">
+                      <p className="text-[11px] text-gray-400 mt-2 truncate">
                         📍 {[restaurant.city, restaurant.state]
                           .filter(Boolean)
                           .join(' - ')}
                       </p>
                     )}
 
-                    <div className="flex flex-wrap gap-1.5 mt-3 mb-4">
+                    <div className="flex flex-wrap gap-1.5 mt-2">
                       {restaurantCategories.slice(0, 2).map((category) => (
                         <span
                           key={category.id}
-                          className="bg-orange-50 text-orange-700 rounded-full px-2 py-1 text-[10px] sm:text-xs font-semibold"
+                          className="bg-[#eaf2eb] text-[#286344] rounded-full px-2 py-1 text-[10px] font-bold"
                         >
                           {category.name}
                         </span>
                       ))}
-
-                      {restaurantCategories.length > 2 && (
-                        <span className="text-[10px] text-gray-400 py-1">
-                          +{restaurantCategories.length - 2}
-                        </span>
-                      )}
                     </div>
 
-                    <Link
-                      href={`/cardapio/${restaurant.slug}`}
-                      className="mt-auto block text-center bg-orange-600 hover:bg-orange-700 text-white rounded-xl py-2.5 px-2 text-xs sm:text-sm font-bold transition"
-                    >
+                    <span className="inline-block mt-3 text-xs font-extrabold text-[#1d5b3b] group-hover:underline">
                       Ver cardápio →
-                    </Link>
+                    </span>
+
                   </div>
-                </article>
+                </Link>
               )
             })}
+
           </div>
         )}
+
       </section>
 
       {/* RODAPÉ */}
       <footer className="bg-white border-t border-gray-100">
         <div className="max-w-7xl mx-auto px-5 py-7 flex flex-col sm:flex-row items-center justify-between gap-3">
+
           <span className="font-black text-gray-800">
-            Menu<span className="text-orange-600">Flow</span>
+            Menu<span className="text-[#d49a35]">Flow</span>
           </span>
+
           <p className="text-xs text-gray-400">
             Encontre restaurantes e faça seu pedido.
           </p>
+
         </div>
       </footer>
+
     </main>
   )
 }

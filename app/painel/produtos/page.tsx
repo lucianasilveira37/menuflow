@@ -2,6 +2,7 @@
 'use client'
 
 import { useEffect, useState, type FormEvent } from 'react'
+import Link from 'next/link'
 import { supabase } from '../../lib/supabase'
 
 type Product = {
@@ -21,6 +22,24 @@ type Category = {
   name: string
   is_active: boolean
 }
+
+const menuItems = [
+  { title: 'Visão geral', href: '/painel', icon: '▦' },
+  { title: 'Produtos', href: '/painel/produtos', icon: '🍕' },
+  { title: 'Categorias', href: '/painel/categorias', icon: '▤' },
+  { title: 'Pedidos', href: '/painel/pedidos', icon: '🧾' },
+  { title: 'Mesas', href: '/painel/mesas', icon: '🪑' },
+  { title: 'Loja', href: '/painel/loja', icon: '🏪' },
+]
+
+const inputClass =
+  'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100'
+
+const primaryButton =
+  'rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50'
+
+const secondaryButton =
+  'rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50'
 
 export default function ProductsPage() {
   const [restaurantId, setRestaurantId] = useState('')
@@ -47,7 +66,7 @@ export default function ProductsPage() {
   const [success, setSuccess] = useState('')
 
   useEffect(() => {
-    loadData()
+    void loadData()
   }, [])
 
   useEffect(() => {
@@ -58,7 +77,7 @@ export default function ProductsPage() {
     }
   }, [previewUrl])
 
-  const filteredProducts = products.filter((product) => {
+  const filteredProducts = products.filter(product => {
     if (filterCategory === 'all') return true
 
     if (filterCategory === 'none') {
@@ -67,6 +86,14 @@ export default function ProductsPage() {
 
     return product.category_id === filterCategory
   })
+
+  const availableCount = products.filter(
+    product => product.is_available
+  ).length
+
+  const unavailableCount = products.filter(
+    product => !product.is_available
+  ).length
 
   async function loadData() {
     setLoading(true)
@@ -83,13 +110,14 @@ export default function ProductsPage() {
       return
     }
 
-    const { data: membership, error: membershipError } = await supabase
-      .from('memberships')
-      .select('restaurant_id')
-      .eq('user_id', user.id)
-      .eq('role', 'owner')
-      .limit(1)
-      .maybeSingle()
+    const { data: membership, error: membershipError } =
+      await supabase
+        .from('memberships')
+        .select('restaurant_id')
+        .eq('user_id', user.id)
+        .eq('role', 'owner')
+        .limit(1)
+        .maybeSingle()
 
     if (membershipError || !membership) {
       setError('Não encontramos um restaurante vinculado à sua conta.')
@@ -114,7 +142,9 @@ export default function ProductsPage() {
     ])
 
     if (productsResult.error) {
-      setError('Erro ao carregar produtos: ' + productsResult.error.message)
+      setError(
+        'Erro ao carregar produtos: ' + productsResult.error.message
+      )
     } else {
       setProducts((productsResult.data || []) as Product[])
     }
@@ -220,7 +250,7 @@ export default function ProductsPage() {
     }
 
     const selectedCategory = categories.find(
-      (category) => category.id === categoryId
+      category => category.id === categoryId
     )
 
     if (
@@ -288,7 +318,7 @@ export default function ProductsPage() {
           throw new Error(insertError.message)
         }
 
-        setProducts((current) => [data as Product, ...current])
+        setProducts(current => [data as Product, ...current])
         setSuccess('Produto cadastrado com sucesso!')
       }
 
@@ -366,8 +396,8 @@ export default function ProductsPage() {
       await removeImage(product.image_url)
     }
 
-    setProducts((current) =>
-      current.filter((item) => item.id !== product.id)
+    setProducts(current =>
+      current.filter(item => item.id !== product.id)
     )
 
     if (editingId === product.id) {
@@ -397,8 +427,8 @@ export default function ProductsPage() {
           updateError.message
       )
     } else {
-      setProducts((current) =>
-        current.map((item) =>
+      setProducts(current =>
+        current.map(item =>
           item.id === product.id
             ? { ...item, is_available: newAvailability }
             : item
@@ -415,259 +445,494 @@ export default function ProductsPage() {
     setUpdatingAvailabilityId(null)
   }
 
-  if (loading) {
-    return (
-      <main className="dashboard-content">
-        <p>Carregando produtos...</p>
-      </main>
-    )
+  function getCategoryName(categoryId: string | null) {
+    if (!categoryId) return 'Sem categoria'
+
+    return categories.find(
+      category => category.id === categoryId
+    )?.name || 'Categoria não encontrada'
   }
 
   return (
-    <main className="dashboard-content">
-      <div className="page-header">
-        <div>
-          <h1>Produtos</h1>
-          <p>Cadastre e gerencie os produtos do seu restaurante.</p>
+    <div className="min-h-screen bg-[#f5f7fb] text-slate-800 md:flex">
+
+      {/* MENU LATERAL */}
+      <aside className="w-full bg-[#111827] p-5 text-white md:min-h-screen md:w-64 md:shrink-0">
+        <div className="mb-8">
+          <h1 className="text-2xl font-extrabold tracking-tight">
+            Menu<span className="text-blue-400">Flow</span>
+          </h1>
+          <p className="mt-1 text-xs text-slate-400">
+            Painel do restaurante
+          </p>
         </div>
-      </div>
 
-      {error && <div className="alert-error">{error}</div>}
-      {success && <div className="alert-success">{success}</div>}
+        <div className="mb-3 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Gerenciamento
+        </div>
 
-      <section className="dashboard-card">
-        <h2>{editingId ? 'Editar produto' : 'Cadastrar produto'}</h2>
+        <nav className="space-y-1">
+          {menuItems.map(item => {
+            const active = item.href === '/painel/produtos'
 
-        <form onSubmit={handleSubmit} className="product-form">
-          <div className="form-group">
-            <label htmlFor="product-name">Nome do produto</label>
-            <input
-              id="product-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Ex: Crepe de queijo"
-              required
-            />
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
+                  active
+                    ? 'bg-blue-600 font-semibold text-white'
+                    : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                }`}
+              >
+                <span className="text-lg">{item.icon}</span>
+                {item.title}
+              </Link>
+            )
+          })}
+        </nav>
+
+        <div className="mt-10 rounded-2xl border border-slate-700 bg-slate-800/60 p-4">
+          <div className="mb-2 text-sm font-semibold text-white">
+            Gerenciamento de produtos
+          </div>
+          <p className="text-xs leading-relaxed text-slate-400">
+            Organize seu cardápio, atualize preços e controle a disponibilidade.
+          </p>
+        </div>
+      </aside>
+
+      {/* CONTEÚDO */}
+      <main className="min-w-0 flex-1 p-4 md:p-7">
+
+        {/* CABEÇALHO */}
+        <div className="mb-7 flex flex-col justify-between gap-4 xl:flex-row xl:items-center">
+          <div>
+            <div className="mb-2 text-sm text-slate-500">
+              MenuFlow <span className="mx-1">/</span> Gerenciamento
+            </div>
+
+            <h2 className="text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
+              Produtos
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Cadastre e gerencie os produtos do seu restaurante.
+            </p>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="product-description">Descrição</label>
-            <textarea
-              id="product-description"
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="Descreva seu produto..."
-              rows={3}
-            />
+          <button
+            type="button"
+            onClick={() => void loadData()}
+            disabled={loading}
+            className={primaryButton}
+          >
+            {loading ? 'Carregando...' : '↻ Atualizar produtos'}
+          </button>
+        </div>
+
+        {/* MENSAGENS */}
+        {error && (
+          <div
+            className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            role="alert"
+          >
+            {error}
+          </div>
+        )}
+
+        {success && (
+          <div
+            className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+            role="status"
+          >
+            {success}
+          </div>
+        )}
+
+        {/* INDICADORES */}
+        <div className="mb-7 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-500">
+                Total de produtos
+              </span>
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-lg">
+                🍕
+              </span>
+            </div>
+            <p className="mt-2 text-2xl font-bold text-slate-900">
+              {products.length}
+            </p>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="product-price">Preço (R$)</label>
-            <input
-              id="product-price"
-              value={price}
-              onChange={(event) => setPrice(event.target.value)}
-              placeholder="Ex: 15,00"
-              inputMode="decimal"
-              required
-            />
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-emerald-700">
+                Disponíveis
+              </span>
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/70 text-lg">
+                ✅
+              </span>
+            </div>
+            <p className="mt-2 text-2xl font-bold text-emerald-800">
+              {availableCount}
+            </p>
           </div>
 
-          <div className="form-group">
-            <label htmlFor="product-category">Categoria</label>
-            <select
-              id="product-category"
-              value={categoryId}
-              onChange={(event) => setCategoryId(event.target.value)}
-            >
-              <option value="">Sem categoria</option>
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-red-700">
+                Desativados
+              </span>
+              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/70 text-lg">
+                ⏸️
+              </span>
+            </div>
+            <p className="mt-2 text-2xl font-bold text-red-800">
+              {unavailableCount}
+            </p>
+          </div>
+        </div>
 
-              {categories
-                .filter(
-                  (category) =>
-                    category.is_active || category.id === categoryId
-                )
-                .map((category) => (
+        {/* FORMULÁRIO */}
+        <section className="mb-7 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+          <div className="mb-5 flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">
+                {editingId ? 'Editar produto' : 'Cadastrar produto'}
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Preencha as informações do produto.
+              </p>
+            </div>
+
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-xl">
+              {editingId ? '✏️' : '➕'}
+            </span>
+          </div>
+
+          <form onSubmit={handleSubmit}>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+
+              <div>
+                <label
+                  htmlFor="product-name"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Nome do produto *
+                </label>
+                <input
+                  id="product-name"
+                  className={inputClass}
+                  value={name}
+                  onChange={event => setName(event.target.value)}
+                  placeholder="Ex: Pizza de queijo"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="product-price"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Preço (R$) *
+                </label>
+                <input
+                  id="product-price"
+                  className={inputClass}
+                  value={price}
+                  onChange={event => setPrice(event.target.value)}
+                  placeholder="Ex: 25,00"
+                  inputMode="decimal"
+                  required
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="product-category"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Categoria
+                </label>
+                <select
+                  id="product-category"
+                  className={inputClass}
+                  value={categoryId}
+                  onChange={event => setCategoryId(event.target.value)}
+                >
+                  <option value="">Sem categoria</option>
+
+                  {categories
+                    .filter(
+                      category =>
+                        category.is_active ||
+                        category.id === categoryId
+                    )
+                    .map(category => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                        {!category.is_active ? ' (Inativa)' : ''}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2 xl:col-span-3">
+                <label
+                  htmlFor="product-description"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Descrição
+                </label>
+                <textarea
+                  id="product-description"
+                  className={`${inputClass} resize-y`}
+                  value={description}
+                  onChange={event => setDescription(event.target.value)}
+                  placeholder="Descreva os ingredientes ou detalhes do produto..."
+                  rows={3}
+                />
+              </div>
+
+              <div className="md:col-span-2 xl:col-span-2">
+                <label
+                  htmlFor="product-image"
+                  className="text-xs font-semibold text-slate-700"
+                >
+                  Foto do produto
+                </label>
+                <input
+                  id="product-image"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={event =>
+                    handleImageChange(event.target.files?.[0] || null)
+                  }
+                  className="mt-2 block w-full rounded-xl border border-slate-200 bg-white text-xs text-slate-600 file:mr-3 file:rounded-l-xl file:border-0 file:bg-blue-50 file:px-4 file:py-3 file:text-xs file:font-semibold file:text-blue-700 hover:file:bg-blue-100"
+                />
+                <p className="mt-1 text-[11px] text-slate-400">
+                  JPG, PNG ou WebP. Tamanho máximo de 5 MB.
+                </p>
+              </div>
+
+              {(previewUrl || currentImageUrl) && (
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <img
+                    src={previewUrl || currentImageUrl}
+                    alt="Prévia do produto"
+                    className="h-16 w-16 rounded-lg object-cover"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold text-slate-700">
+                      Prévia da imagem
+                    </p>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      Imagem selecionada para o produto.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+              <button
+                type="submit"
+                disabled={saving || loading}
+                className={primaryButton}
+              >
+                {saving
+                  ? 'Salvando...'
+                  : editingId
+                    ? 'Salvar alterações'
+                    : '+ Cadastrar produto'}
+              </button>
+
+              {editingId && (
+                <button
+                  type="button"
+                  className={secondaryButton}
+                  onClick={resetForm}
+                  disabled={saving}
+                >
+                  Cancelar edição
+                </button>
+              )}
+            </div>
+          </form>
+        </section>
+
+        {/* LISTA DE PRODUTOS */}
+        <section>
+          <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">
+                Produtos cadastrados
+              </h3>
+              <p className="mt-1 text-xs text-slate-500">
+                {filteredProducts.length} produto(s) encontrado(s)
+              </p>
+            </div>
+
+            <div className="w-full sm:max-w-xs">
+              <select
+                id="filter-category"
+                value={filterCategory}
+                onChange={event => setFilterCategory(event.target.value)}
+                className={inputClass}
+                aria-label="Filtrar produtos por categoria"
+              >
+                <option value="all">Todas as categorias</option>
+                <option value="none">Sem categoria</option>
+
+                {categories.map(category => (
                   <option key={category.id} value={category.id}>
                     {category.name}
                     {!category.is_active ? ' (Inativa)' : ''}
                   </option>
                 ))}
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label htmlFor="product-image">Foto do produto</label>
-            <input
-              id="product-image"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={(event) =>
-                handleImageChange(event.target.files?.[0] || null)
-              }
-            />
-            <small>Formatos: JPG, PNG ou WebP. Limite: 5 MB.</small>
-          </div>
-
-          {(previewUrl || currentImageUrl) && (
-            <div className="image-preview">
-              <img
-                src={previewUrl || currentImageUrl}
-                alt="Prévia do produto"
-              />
+              </select>
             </div>
-          )}
-
-          <div className="form-actions">
-            <button
-              type="submit"
-              className="button-primary"
-              disabled={saving}
-            >
-              {saving
-                ? 'Salvando...'
-                : editingId
-                  ? 'Salvar alterações'
-                  : 'Cadastrar produto'}
-            </button>
-
-            {editingId && (
-              <button
-                type="button"
-                className="button-secondary"
-                onClick={resetForm}
-                disabled={saving}
-              >
-                Cancelar edição
-              </button>
-            )}
           </div>
-        </form>
-      </section>
 
-      <section className="dashboard-card products-section">
-        <div className="section-heading">
-          <h2>Produtos cadastrados</h2>
-          <span>{filteredProducts.length} produto(s)</span>
-        </div>
+          {loading ? (
+            <div className="rounded-xl border border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-500">
+              Carregando produtos...
+            </div>
+          ) : filteredProducts.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-12 text-center">
+              <div className="mb-3 text-4xl">🍕</div>
+              <h4 className="font-semibold text-slate-800">
+                {products.length === 0
+                  ? 'Nenhum produto cadastrado'
+                  : 'Nenhum produto encontrado'}
+              </h4>
+              <p className="mt-1 text-sm text-slate-500">
+                {products.length === 0
+                  ? 'Cadastre seu primeiro produto usando o formulário acima.'
+                  : 'Não existem produtos nesta categoria.'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-5">
+              {filteredProducts.map(product => (
+                <article
+                  key={product.id}
+                  className={`overflow-hidden rounded-xl border shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                    product.is_available
+                      ? 'border-emerald-200 bg-emerald-50'
+                      : 'border-red-100 bg-red-50'
+                  }`}
+                >
+                  {/* IMAGEM */}
+                  <div className="relative h-44 overflow-hidden bg-slate-100">
+                    {product.image_url ? (
+                      <img
+                        src={product.image_url}
+                        alt={product.name}
+                        className={`h-full w-full object-cover transition duration-300 hover:scale-105 ${
+                          !product.is_available ? 'grayscale-[35%]' : ''
+                        }`}
+                      />
+                    ) : (
+                      <div className="flex h-full flex-col items-center justify-center gap-2 text-slate-400">
+                        <span className="text-4xl">🍽️</span>
+                        <span className="text-xs">Sem imagem</span>
+                      </div>
+                    )}
 
-        <div className="form-group">
-          <label htmlFor="filter-category">
-            Filtrar por categoria
-          </label>
-
-          <select
-            id="filter-category"
-            value={filterCategory}
-            onChange={(event) => setFilterCategory(event.target.value)}
-          >
-            <option value="all">Todas as categorias</option>
-            <option value="none">Sem categoria</option>
-
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
-                {!category.is_active ? ' (Inativa)' : ''}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {filteredProducts.length === 0 ? (
-          <p className="empty-state">
-            {products.length === 0
-              ? 'Nenhum produto cadastrado ainda.'
-              : 'Nenhum produto encontrado nesta categoria.'}
-          </p>
-        ) : (
-          <div className="products-grid">
-            {filteredProducts.map((product) => (
-              <article className="product-card" key={product.id}>
-                {product.image_url ? (
-                  <img
-                    className="product-card-image"
-                    src={product.image_url}
-                    alt={product.name}
-                  />
-                ) : (
-                  <div className="product-card-placeholder">
-                    Sem imagem
-                  </div>
-                )}
-
-                <div className="product-card-content">
-                  <div className="product-card-top">
                     <span
-                      className={
+                      className={`absolute right-3 top-3 rounded-full px-3 py-1 text-[10px] font-bold shadow-sm ${
                         product.is_available
-                          ? 'status-badge status-active'
-                          : 'status-badge status-inactive'
-                      }
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}
                     >
-                      {product.is_available ? 'Disponível' : 'Desativado'}
+                      {product.is_available
+                        ? '● Disponível'
+                        : '● Desativado'}
                     </span>
                   </div>
 
-                  <h3>{product.name}</h3>
+                  {/* INFORMAÇÕES */}
+                  <div className="p-4">
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <h4 className="min-w-0 break-words text-base font-bold text-slate-900">
+                        {product.name}
+                      </h4>
+                    </div>
 
-                  <p className="product-description">
-                    {product.description || 'Sem descrição'}
-                  </p>
+                    <span className="inline-flex max-w-full rounded-lg bg-white/80 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+                      {getCategoryName(product.category_id)}
+                    </span>
 
-                  <strong className="product-price">
-                    {Number(product.price).toLocaleString('pt-BR', {
-                      style: 'currency',
-                      currency: 'BRL',
-                    })}
-                  </strong>
+                    <p className="mt-3 min-h-10 break-words text-xs leading-relaxed text-slate-600">
+                      {product.description || 'Sem descrição cadastrada.'}
+                    </p>
 
-                  <div className="product-card-actions">
-                    <button
-                      type="button"
-                      className={
-                        product.is_available
-                          ? 'button-disable'
-                          : 'button-enable'
-                      }
-                      onClick={() =>
-                        toggleProductAvailability(product)
-                      }
-                      disabled={
-                        updatingAvailabilityId === product.id
-                      }
-                    >
-                      {updatingAvailabilityId === product.id
-                        ? 'Aguarde...'
-                        : product.is_available
-                          ? 'Desativar'
-                          : 'Ativar'}
-                    </button>
+                    <div className="mt-3 flex items-center justify-between border-t border-black/5 pt-3">
+                      <span className="text-[11px] font-medium text-slate-500">
+                        Preço
+                      </span>
+                      <strong className="text-xl font-extrabold text-slate-900">
+                        {Number(product.price).toLocaleString('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL',
+                        })}
+                      </strong>
+                    </div>
 
-                    <button
-                      type="button"
-                      className="button-secondary"
-                      onClick={() => editProduct(product)}
-                    >
-                      Editar
-                    </button>
+                    {/* AÇÕES */}
+                    <div className="mt-4 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        className={`rounded-lg px-3 py-2.5 text-xs font-bold transition disabled:opacity-50 ${
+                          product.is_available
+                            ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
+                            : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                        }`}
+                        onClick={() =>
+                          toggleProductAvailability(product)
+                        }
+                        disabled={
+                          updatingAvailabilityId === product.id
+                        }
+                      >
+                        {updatingAvailabilityId === product.id
+                          ? 'Aguarde...'
+                          : product.is_available
+                            ? '⏸ Desativar'
+                            : '✓ Ativar'}
+                      </button>
 
-                    <button
-                      type="button"
-                      className="button-danger"
-                      onClick={() => deleteProduct(product)}
-                      disabled={deletingId === product.id}
-                    >
-                      {deletingId === product.id
-                        ? 'Excluindo...'
-                        : 'Excluir'}
-                    </button>
+                      <button
+                        type="button"
+                        className="rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50"
+                        onClick={() => editProduct(product)}
+                      >
+                        ✏️ Editar
+                      </button>
+
+                      <button
+                        type="button"
+                        className="col-span-2 rounded-lg border border-red-200 bg-white/70 px-3 py-2 text-xs font-bold text-red-700 transition hover:bg-red-100 disabled:opacity-50"
+                        onClick={() => void deleteProduct(product)}
+                        disabled={deletingId === product.id}
+                      >
+                        {deletingId === product.id
+                          ? 'Excluindo...'
+                          : '🗑 Excluir produto'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-    </main>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </main>
+    </div>
   )
 }

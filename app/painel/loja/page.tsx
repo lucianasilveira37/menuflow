@@ -1,6 +1,7 @@
 
 'use client'
 
+import Link from 'next/link'
 import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '../../lib/supabase'
 
@@ -36,37 +37,29 @@ type OperatingDay = {
 }
 
 const weekDays = [
-  'Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira',
-  'Quinta-feira', 'Sexta-feira', 'Sábado',
+  'Domingo',
+  'Segunda-feira',
+  'Terça-feira',
+  'Quarta-feira',
+  'Quinta-feira',
+  'Sexta-feira',
+  'Sábado',
 ]
 
-const inputStyle = {
-  width: '100%',
-  padding: 12,
-  border: '1px solid #ddd',
-  borderRadius: 8,
-  marginTop: 7,
-  marginBottom: 17,
-  boxSizing: 'border-box' as const,
-}
+const menuItems = [
+  { title: 'Visão geral', href: '/painel', icon: '▦' },
+  { title: 'Produtos', href: '/painel/produtos', icon: '🍕' },
+  { title: 'Categorias', href: '/painel/categorias', icon: '▤' },
+  { title: 'Pedidos', href: '/painel/pedidos', icon: '🧾' },
+  { title: 'Mesas', href: '/painel/mesas', icon: '🪑' },
+  { title: 'Loja', href: '/painel/loja', icon: '🏪' },
+]
 
-const cardStyle = {
-  background: '#fff',
-  borderRadius: 12,
-  padding: 22,
-  marginBottom: 22,
-  border: '1px solid #eee',
-}
+const inputClass =
+  'mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 disabled:bg-slate-100 disabled:text-slate-400'
 
-const primaryButton = {
-  background: '#f07835',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 8,
-  padding: '12px 20px',
-  cursor: 'pointer',
-  fontWeight: 600 as const,
-}
+const cardClass =
+  'mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6'
 
 function formatCurrency(value: number) {
   return Number(value).toLocaleString('pt-BR', {
@@ -105,12 +98,10 @@ export default function MinhaLojaPage() {
   const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([])
   const [neighborhoodName, setNeighborhoodName] = useState('')
   const [neighborhoodFee, setNeighborhoodFee] = useState('')
-
   const [editingId, setEditingId] = useState<string | null>(null)
   const [savingNeighborhood, setSavingNeighborhood] = useState(false)
   const [loadingNeighborhoods, setLoadingNeighborhoods] = useState(false)
 
-  // Configuração do modo de entrega.
   const [deliveryMode, setDeliveryMode] = useState<'simple' | 'gps'>('simple')
   const [savingDeliveryMode, setSavingDeliveryMode] = useState(false)
 
@@ -139,10 +130,7 @@ export default function MinhaLojaPage() {
       return
     }
 
-    const {
-      data: membership,
-      error: membershipError,
-    } = await supabase
+    const { data: membership, error: membershipError } = await supabase
       .from('memberships')
       .select('restaurant_id')
       .eq('user_id', user.id)
@@ -159,7 +147,9 @@ export default function MinhaLojaPage() {
 
     const { data, error: restaurantError } = await supabase
       .from('restaurants')
-      .select('id, name, slug, description, phone, address, city, state, logo_url, is_open, manual_override, timezone, delivery_validation_mode')
+      .select(
+        'id, name, slug, description, phone, address, city, state, logo_url, is_open, manual_override, timezone, delivery_validation_mode'
+      )
       .eq('id', id)
       .single()
 
@@ -173,7 +163,6 @@ export default function MinhaLojaPage() {
 
     setRestaurantId(id)
     setRestaurant(shop)
-
     setDeliveryMode(shop.delivery_validation_mode || 'simple')
 
     setForm({
@@ -186,9 +175,11 @@ export default function MinhaLojaPage() {
       state: shop.state || '',
     })
 
-    await loadNeighborhoods(id)
-    await loadOperatingHours(id)
-    await refreshEffectiveOpen(id)
+    await Promise.all([
+      loadNeighborhoods(id),
+      loadOperatingHours(id),
+      refreshEffectiveOpen(id),
+    ])
 
     setLoading(false)
   }
@@ -274,7 +265,7 @@ export default function MinhaLojaPage() {
       .upsert(rows, { onConflict: 'restaurant_id,weekday' })
 
     if (saveError) {
-      setError('Não foi possível salvar. Confira se a tabela operating_hours foi criada.')
+      setError('Não foi possível salvar os horários de funcionamento.')
       setSavingSchedule(false)
       return
     }
@@ -322,12 +313,11 @@ export default function MinhaLojaPage() {
       value === null
         ? 'Controle automático por horário ativado.'
         : value
-          ? 'Loja aberta manualmente até voltar ao automático.'
-          : 'Loja fechada manualmente até voltar ao automático.'
+          ? 'Loja aberta manualmente.'
+          : 'Loja fechada manualmente.'
     )
   }
 
-  // Salva a configuração do modo de entrega.
   async function saveDeliveryMode() {
     if (!restaurantId) return
 
@@ -337,13 +327,10 @@ export default function MinhaLojaPage() {
 
     const { error: saveError } = await supabase
       .from('restaurants')
-      .update({
-        delivery_validation_mode: deliveryMode,
-      })
+      .update({ delivery_validation_mode: deliveryMode })
       .eq('id', restaurantId)
 
     if (saveError) {
-      console.error('Erro ao salvar modo de entrega:', saveError)
       setError('Não foi possível salvar o modo de entrega.')
       setSavingDeliveryMode(false)
       return
@@ -351,10 +338,7 @@ export default function MinhaLojaPage() {
 
     setRestaurant(current =>
       current
-        ? {
-            ...current,
-            delivery_validation_mode: deliveryMode,
-          }
+        ? { ...current, delivery_validation_mode: deliveryMode }
         : current
     )
 
@@ -397,11 +381,7 @@ export default function MinhaLojaPage() {
   }
 
   async function uploadLogo(file: File) {
-    const allowedTypes = [
-      'image/jpeg',
-      'image/png',
-      'image/webp',
-    ]
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
 
     if (!allowedTypes.includes(file.type)) {
       throw new Error('Use uma imagem JPG, PNG ou WebP.')
@@ -565,7 +545,6 @@ export default function MinhaLojaPage() {
           ? 'Esse bairro já está cadastrado.'
           : `Não foi possível salvar o bairro: ${result.error.message}`
       )
-
       setSavingNeighborhood(false)
       return
     }
@@ -581,25 +560,18 @@ export default function MinhaLojaPage() {
     )
 
     await loadNeighborhoods(restaurantId)
-
     setSavingNeighborhood(false)
   }
 
   function editNeighborhood(item: Neighborhood) {
     setEditingId(item.id)
     setNeighborhoodName(item.name)
-
     setNeighborhoodFee(
       Number(item.delivery_fee).toFixed(2).replace('.', ',')
     )
 
     setError('')
     setMessage('')
-
-    window.scrollTo({
-      top: document.body.scrollHeight,
-      behavior: 'smooth',
-    })
   }
 
   function cancelEdit() {
@@ -623,12 +595,7 @@ export default function MinhaLojaPage() {
       return
     }
 
-    setMessage(
-      item.is_active
-        ? 'Bairro desativado.'
-        : 'Bairro ativado.'
-    )
-
+    setMessage(item.is_active ? 'Bairro desativado.' : 'Bairro ativado.')
     await loadNeighborhoods(restaurantId)
   }
 
@@ -653,686 +620,674 @@ export default function MinhaLojaPage() {
       return
     }
 
-    if (editingId === item.id) {
-      cancelEdit()
-    }
+    if (editingId === item.id) cancelEdit()
 
     setMessage('Bairro excluído com sucesso!')
-
     await loadNeighborhoods(restaurantId)
   }
 
+  const activeNeighborhoods = neighborhoods.filter(item => item.is_active).length
+
   if (loading) {
     return (
-      <main className="dashboard-content">
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f7fb] text-slate-500">
         Carregando informações da loja...
-      </main>
+      </div>
     )
   }
 
   if (!restaurant) {
     return (
-      <main className="dashboard-content">
-        <p style={{ color: '#b42318' }}>
-          {error || 'Restaurante não encontrado.'}
-        </p>
-      </main>
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f7fb] p-6">
+        <div className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-6 text-center shadow-sm">
+          <p className="font-semibold text-red-700">
+            {error || 'Restaurante não encontrado.'}
+          </p>
+          <button
+            onClick={loadRestaurant}
+            className="mt-5 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      </div>
     )
   }
 
   return (
-    <main className="dashboard-content">
-      <div style={{ marginBottom: 25 }}>
-        <h1 style={{ fontSize: 28, marginBottom: 8 }}>
-          Minha loja
-        </h1>
+    <div className="min-h-screen bg-[#f5f7fb] text-slate-800 md:flex">
 
-        <p style={{ color: '#777' }}>
-          Gerencie as informações públicas do seu restaurante.
-        </p>
-      </div>
-
-      {error && (
-        <div style={{
-          background: '#ffe8e8',
-          color: '#b42318',
-          padding: 14,
-          borderRadius: 8,
-          marginBottom: 16,
-        }}>
-          {error}
-        </div>
-      )}
-
-      {message && (
-        <div style={{
-          background: '#e8f7ed',
-          color: '#18763b',
-          padding: 14,
-          borderRadius: 8,
-          marginBottom: 16,
-        }}>
-          {message}
-        </div>
-      )}
-
-      <section style={cardStyle}>
-        <h2 style={{ marginTop: 0 }}>Funcionamento da loja</h2>
-
-        <p style={{ color: '#777', lineHeight: 1.6 }}>
-          A loja abre e fecha conforme os horários cadastrados. Você também pode
-          forçar a abertura ou o fechamento manualmente.
-        </p>
-
-        <div style={{
-          padding: 14,
-          borderRadius: 8,
-          background: effectiveOpen ? '#e8f7ed' : '#fef0ef',
-          marginBottom: 16,
-        }}>
-          <strong style={{ color: effectiveOpen ? '#18763b' : '#b42318' }}>
-            {checkingOpen
-              ? 'Consultando funcionamento...'
-              : effectiveOpen
-                ? '● Loja aberta agora'
-                : '● Loja fechada agora'}
-          </strong>
-
-          <p style={{ margin: '6px 0 0', color: '#666', fontSize: 13 }}>
-            {restaurant.manual_override === null
-              ? 'Modo automático: os horários cadastrados controlam a abertura.'
-              : restaurant.manual_override
-                ? 'Abertura manual ativa; o horário automático está ignorado.'
-                : 'Fechamento manual ativo; o horário automático está ignorado.'}
+      {/* MENU LATERAL */}
+      <aside className="w-full bg-[#111827] p-5 text-white md:min-h-screen md:w-64 md:shrink-0">
+        <div className="mb-10">
+          <h1 className="text-2xl font-bold tracking-tight">
+            Menu<span className="text-blue-400">Flow</span>
+          </h1>
+          <p className="mt-1 text-xs text-slate-400">
+            Painel do restaurante
           </p>
         </div>
 
-        <div style={{
-          display: 'flex',
-          gap: 10,
-          flexWrap: 'wrap',
-          marginBottom: 24,
-        }}>
-          <button
-            type="button"
-            onClick={() => setManualOverride(true)}
-            style={{ ...primaryButton, background: '#18763b' }}
-          >
-            Forçar abertura
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setManualOverride(false)}
-            style={{ ...primaryButton, background: '#b42318' }}
-          >
-            Forçar fechamento
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setManualOverride(null)}
-            style={{ ...primaryButton, background: '#555' }}
-          >
-            Voltar ao automático
-          </button>
-        </div>
-
-        <form onSubmit={saveSchedule}>
-          <h3 style={{ fontSize: 17 }}>Horários semanais</h3>
-
-          <p style={{ color: '#777', fontSize: 13, lineHeight: 1.5 }}>
-            Configure um período por dia. Para dias sem atendimento, marque “Fechado”.
-            Os horários usam o fuso de Fortaleza.
-          </p>
-
-          <div style={{ display: 'grid', gap: 12 }}>
-            {schedule.map(day => (
-              <div
-                key={day.weekday}
-                style={{
-                  display: 'flex',
-                  flexWrap: 'wrap',
-                  gap: 10,
-                  alignItems: 'center',
-                  borderBottom: '1px solid #eee',
-                  paddingBottom: 12,
-                }}
-              >
-                <strong style={{ width: 135 }}>
-                  {weekDays[day.weekday]}
-                </strong>
-
-                <label style={{ fontSize: 13, flex: '1 1 100px' }}>
-                  Abre
-                  <input
-                    type="time"
-                    value={day.opening_time.slice(0, 5)}
-                    disabled={day.is_closed}
-                    onChange={e =>
-                      updateScheduleDay(day.weekday, {
-                        opening_time: e.target.value,
-                      })
-                    }
-                    style={{ ...inputStyle, marginBottom: 0 }}
-                  />
-                </label>
-
-                <label style={{ fontSize: 13, flex: '1 1 100px' }}>
-                  Fecha
-                  <input
-                    type="time"
-                    value={day.closing_time.slice(0, 5)}
-                    disabled={day.is_closed}
-                    onChange={e =>
-                      updateScheduleDay(day.weekday, {
-                        closing_time: e.target.value,
-                      })
-                    }
-                    style={{ ...inputStyle, marginBottom: 0 }}
-                  />
-                </label>
-
-                <label style={{
-                  display: 'flex',
-                  gap: 6,
-                  alignItems: 'center',
-                  fontSize: 13,
-                }}>
-                  <input
-                    type="checkbox"
-                    checked={day.is_closed}
-                    onChange={e =>
-                      updateScheduleDay(day.weekday, {
-                        is_closed: e.target.checked,
-                      })
-                    }
-                  />
-                  Fechado
-                </label>
-              </div>
-            ))}
-          </div>
-
-          <button
-            type="submit"
-            disabled={savingSchedule}
-            style={{
-              ...primaryButton,
-              marginTop: 18,
-              opacity: savingSchedule ? 0.6 : 1,
-            }}
-          >
-            {savingSchedule ? 'Salvando horários...' : 'Salvar horários'}
-          </button>
-        </form>
-      </section>
-
-      <section style={cardStyle}>
-        <h2 style={{ marginTop: 0 }}>
-          Informações do restaurante
-        </h2>
-
-        <form onSubmit={saveShop}>
-          <label>
-            Nome do restaurante
-            <input
-              style={inputStyle}
-              value={form.name}
-              onChange={e =>
-                setForm({ ...form, name: e.target.value })
-              }
-              required
-            />
-          </label>
-
-          <label>
-            Endereço público do cardápio (slug)
-            <input
-              style={inputStyle}
-              value={form.slug}
-              onChange={e =>
-                setForm({
-                  ...form,
-                  slug: e.target.value
-                    .toLowerCase()
-                    .replace(/[^a-z0-9-]/g, '-'),
-                })
-              }
-              required
-            />
-          </label>
-
-          <label>
-            Cidade
-            <input
-              style={inputStyle}
-              value={form.city}
-              onChange={e =>
-                setForm({ ...form, city: e.target.value })
-              }
-              placeholder="Ex.: Jaguaruana"
-              required
-            />
-          </label>
-
-          <label>
-            Estado (UF)
-            <input
-              style={inputStyle}
-              value={form.state}
-              maxLength={2}
-              onChange={e =>
-                setForm({
-                  ...form,
-                  state: e.target.value.toUpperCase().replace(/[^A-Z]/g, ''),
-                })
-              }
-              placeholder="Ex.: CE"
-              required
-            />
-          </label>
-
-          <p style={{
-            color: '#777',
-            fontSize: 13,
-            marginTop: -10,
-            marginBottom: 17,
-          }}>
-            Endereço atual: /cardapio/{form.slug}
-          </p>
-
-          <label>
-            Descrição
-            <textarea
-              style={{
-                ...inputStyle,
-                minHeight: 90,
-                resize: 'vertical',
-              }}
-              value={form.description}
-              onChange={e =>
-                setForm({ ...form, description: e.target.value })
-              }
-              placeholder="Conte um pouco sobre seu restaurante..."
-            />
-          </label>
-
-          <label>
-            Telefone / WhatsApp
-            <input
-              style={inputStyle}
-              value={form.phone}
-              onChange={e =>
-                setForm({ ...form, phone: e.target.value })
-              }
-              placeholder="(88) 99999-9999"
-            />
-          </label>
-
-          <label>
-            Endereço
-            <textarea
-              style={{
-                ...inputStyle,
-                minHeight: 75,
-                resize: 'vertical',
-              }}
-              value={form.address}
-              onChange={e =>
-                setForm({ ...form, address: e.target.value })
-              }
-              placeholder="Rua, número, bairro e cidade"
-            />
-          </label>
-
-          <label>
-            Logotipo do restaurante
-            <input
-              style={inputStyle}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              onChange={e =>
-                setLogoFile(e.target.files?.[0] || null)
-              }
-            />
-          </label>
-
-          {restaurant.logo_url && (
-            <div style={{ marginBottom: 18 }}>
-              <p style={{ color: '#777', fontSize: 13 }}>
-                Logotipo atual:
-              </p>
-
-              <img
-                src={restaurant.logo_url}
-                alt="Logotipo do restaurante"
-                style={{
-                  width: 120,
-                  height: 120,
-                  objectFit: 'contain',
-                  border: '1px solid #eee',
-                  borderRadius: 10,
-                  padding: 8,
-                }}
-              />
-            </div>
-          )}
-
-          {logoFile && (
-            <p style={{ color: '#18763b', fontSize: 13 }}>
-              Nova imagem selecionada: {logoFile.name}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={saving}
-            style={{
-              ...primaryButton,
-              opacity: saving ? 0.6 : 1,
-            }}
-          >
-            {saving ? 'Salvando...' : 'Salvar alterações'}
-          </button>
-        </form>
-      </section>
-
-      {/* CONFIGURAÇÃO DO MODO DE ENTREGA */}
-      <section style={cardStyle}>
-        <h2 style={{ marginTop: 0 }}>Modo de entrega</h2>
-
-        <p style={{ color: '#777', lineHeight: 1.6 }}>
-          Escolha como o MenuFlow deverá validar as entregas do seu restaurante.
+        <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+          Gerenciamento
         </p>
 
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 10,
-            padding: 14,
-            border: deliveryMode === 'simple'
-              ? '2px solid #16a34a'
-              : '1px solid #ddd',
-            borderRadius: 10,
-            marginBottom: 12,
-            cursor: 'pointer',
-          }}
-        >
-          <input
-            type="radio"
-            name="deliveryMode"
-            value="simple"
-            checked={deliveryMode === 'simple'}
-            onChange={() => setDeliveryMode('simple')}
-          />
-
-          <span>
-            <strong>Entrega por bairro</strong>
-            <br />
-            <small style={{ color: '#777' }}>
-              O cliente digita o bairro. O sistema confere se ele está cadastrado
-              e calcula a taxa. Não exige localização GPS.
-            </small>
-          </span>
-        </label>
-
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'flex-start',
-            gap: 10,
-            padding: 14,
-            border: deliveryMode === 'gps'
-              ? '2px solid #16a34a'
-              : '1px solid #ddd',
-            borderRadius: 10,
-            marginBottom: 18,
-            cursor: 'pointer',
-          }}
-        >
-          <input
-            type="radio"
-            name="deliveryMode"
-            value="gps"
-            checked={deliveryMode === 'gps'}
-            onChange={() => setDeliveryMode('gps')}
-          />
-
-          <span>
-            <strong>Entrega por bairro + GPS</strong>
-            <br />
-            <small style={{ color: '#777' }}>
-              Além de conferir o bairro, o sistema verifica se a localização
-              do cliente está dentro da área de entrega cadastrada.
-            </small>
-          </span>
-        </label>
-
-        <button
-          type="button"
-          onClick={saveDeliveryMode}
-          disabled={savingDeliveryMode}
-          style={{
-            ...primaryButton,
-            opacity: savingDeliveryMode ? 0.6 : 1,
-          }}
-        >
-          {savingDeliveryMode
-            ? 'Salvando...'
-            : 'Salvar modo de entrega'}
-        </button>
-      </section>
-
-      <section style={cardStyle}>
-        <h2 style={{ marginTop: 0 }}>
-          Taxas de entrega por bairro
-        </h2>
-
-        <p style={{ color: '#777', lineHeight: 1.6 }}>
-          Cadastre os bairros atendidos pelo restaurante e
-          defina quanto será cobrado pela entrega em cada um.
-          Os bairros ativos poderão ser escolhidos pelos clientes.
-        </p>
-
-        <form onSubmit={saveNeighborhood}>
-          <h3 style={{ fontSize: 17 }}>
-            {editingId ? 'Editar bairro' : 'Adicionar bairro'}
-          </h3>
-
-          <label>
-            Nome do bairro
-            <input
-              style={inputStyle}
-              value={neighborhoodName}
-              onChange={e => setNeighborhoodName(e.target.value)}
-              placeholder="Ex.: Centro"
-              required
-            />
-          </label>
-
-          <label>
-            Taxa de entrega (R$)
-            <input
-              style={inputStyle}
-              type="number"
-              min="0"
-              step="0.01"
-              value={neighborhoodFee}
-              onChange={e => setNeighborhoodFee(e.target.value)}
-              placeholder="Ex.: 5,00"
-              required
-            />
-          </label>
-
-          <div style={{
-            display: 'flex',
-            gap: 10,
-            flexWrap: 'wrap',
-          }}>
-            <button
-              type="submit"
-              disabled={savingNeighborhood}
-              style={{
-                ...primaryButton,
-                opacity: savingNeighborhood ? 0.6 : 1,
-              }}
+        <nav className="space-y-2">
+          {menuItems.map(item => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
+                item.href === '/painel/loja'
+                  ? 'bg-blue-600 font-semibold text-white'
+                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+              }`}
             >
-              {savingNeighborhood
-                ? 'Salvando...'
-                : editingId
-                  ? 'Salvar bairro'
-                  : 'Adicionar bairro'}
-            </button>
+              <span className="w-5 text-center">{item.icon}</span>
+              {item.title}
+            </Link>
+          ))}
+        </nav>
 
-            {editingId && (
-              <button
-                type="button"
-                onClick={cancelEdit}
-                style={{
-                  ...primaryButton,
-                  background: '#666',
-                }}
-              >
-                Cancelar edição
-              </button>
-            )}
+        <div className="mt-10 rounded-xl border border-slate-700 bg-slate-800/70 p-4">
+          <p className="text-sm font-semibold">Configurações da loja</p>
+          <p className="mt-1 text-xs leading-5 text-slate-400">
+            Personalize seu restaurante, horários e opções de entrega.
+          </p>
+        </div>
+      </aside>
+
+      {/* CONTEÚDO PRINCIPAL */}
+      <main className="min-w-0 flex-1 p-5 md:p-8">
+
+        {/* CABEÇALHO */}
+        <header className="mb-8 flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="text-sm text-slate-500">
+              MenuFlow / Gerenciamento
+            </p>
+            <h2 className="mt-1 text-2xl font-bold">
+              Minha loja
+            </h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Gerencie as informações e o funcionamento do seu restaurante.
+            </p>
           </div>
-        </form>
 
-        <div style={{
-          borderTop: '1px solid #eee',
-          marginTop: 25,
-          paddingTop: 20,
-        }}>
-          <h3 style={{ fontSize: 17 }}>
-            Bairros cadastrados ({neighborhoods.length})
-          </h3>
+          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-blue-100 font-bold text-blue-700">
+              {restaurant.logo_url ? (
+                <img
+                  src={restaurant.logo_url}
+                  alt="Logotipo"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                restaurant.name.charAt(0).toUpperCase()
+              )}
+            </div>
+            <div>
+              <p className="text-sm font-semibold">{restaurant.name}</p>
+              <p className="text-xs text-slate-500">Configurações da loja</p>
+            </div>
+          </div>
+        </header>
 
-          {loadingNeighborhoods ? (
-            <p style={{ color: '#777' }}>
-              Carregando bairros...
+        {/* MENSAGENS */}
+        {error && (
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            <span>⚠</span>
+            <p className="flex-1">{error}</p>
+            <button onClick={() => setError('')} className="font-bold">×</button>
+          </div>
+        )}
+
+        {message && (
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
+            <span>✓</span>
+            <p className="flex-1">{message}</p>
+            <button onClick={() => setMessage('')} className="font-bold">×</button>
+          </div>
+        )}
+
+        {/* RESUMO */}
+        <section className="mb-8 grid gap-4 sm:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm text-slate-500">Funcionamento atual</p>
+            <p className={`mt-3 text-xl font-bold ${effectiveOpen ? 'text-emerald-600' : 'text-red-600'}`}>
+              {checkingOpen ? 'Consultando...' : effectiveOpen ? 'Aberta' : 'Fechada'}
             </p>
-          ) : neighborhoods.length === 0 ? (
-            <p style={{
-              color: '#777',
-              background: '#f8f8f8',
-              padding: 16,
-              borderRadius: 8,
-            }}>
-              Nenhum bairro cadastrado ainda.
+            <p className="mt-1 text-xs text-slate-400">Situação da loja</p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm text-slate-500">Bairros cadastrados</p>
+            <p className="mt-3 text-3xl font-bold">{neighborhoods.length}</p>
+            <p className="mt-1 text-xs text-slate-400">
+              {activeNeighborhoods} bairros ativos
             </p>
-          ) : (
-            <div style={{
-              display: 'grid',
-              gap: 12,
-            }}>
-              {neighborhoods.map(item => (
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-sm text-slate-500">Modo de entrega</p>
+            <p className="mt-3 text-xl font-bold">
+              {deliveryMode === 'gps' ? 'Bairro + GPS' : 'Por bairro'}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">Validação de entrega</p>
+          </div>
+        </section>
+
+        {/* FUNCIONAMENTO */}
+        <section className={cardClass}>
+          <div className="mb-5 flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-xl text-blue-700">
+              ◷
+            </div>
+            <div>
+              <h3 className="text-lg font-bold">Funcionamento da loja</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Controle a abertura e configure seus horários semanais.
+              </p>
+            </div>
+          </div>
+
+          <div className={`mb-5 rounded-xl border p-4 ${
+            effectiveOpen
+              ? 'border-emerald-200 bg-emerald-50'
+              : 'border-red-200 bg-red-50'
+          }`}>
+            <p className={`font-bold ${effectiveOpen ? 'text-emerald-700' : 'text-red-700'}`}>
+              {checkingOpen
+                ? 'Consultando funcionamento...'
+                : effectiveOpen
+                  ? '● Loja aberta agora'
+                  : '● Loja fechada agora'}
+            </p>
+            <p className="mt-1 text-xs text-slate-600">
+              {restaurant.manual_override === null
+                ? 'Modo automático: os horários cadastrados controlam a abertura.'
+                : restaurant.manual_override
+                  ? 'Abertura manual ativa; o horário automático está ignorado.'
+                  : 'Fechamento manual ativo; o horário automático está ignorado.'}
+            </p>
+          </div>
+
+          <div className="mb-7 grid gap-3 sm:grid-cols-3">
+            <button
+              type="button"
+              onClick={() => setManualOverride(true)}
+              className="rounded-xl bg-emerald-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700"
+            >
+              Abrir manualmente
+            </button>
+            <button
+              type="button"
+              onClick={() => setManualOverride(false)}
+              className="rounded-xl bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
+            >
+              Fechar manualmente
+            </button>
+            <button
+              type="button"
+              onClick={() => setManualOverride(null)}
+              className="rounded-xl bg-slate-700 px-4 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              Voltar ao automático
+            </button>
+          </div>
+
+          <div className="mb-5 border-t border-slate-100 pt-6">
+            <h4 className="font-bold">Horários semanais</h4>
+            <p className="mt-1 text-sm text-slate-500">
+              Configure os horários de abertura e fechamento de cada dia.
+            </p>
+          </div>
+
+          <form onSubmit={saveSchedule}>
+            <div className="space-y-3">
+              {schedule.map(day => (
                 <div
-                  key={item.id}
-                  style={{
-                    border: '1px solid #eee',
-                    borderRadius: 10,
-                    padding: 15,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 15,
-                    flexWrap: 'wrap',
-                    opacity: item.is_active ? 1 : 0.65,
-                  }}
+                  key={day.weekday}
+                  className="grid items-center gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-[minmax(130px,1fr)_1fr_1fr_auto]"
                 >
-                  <div>
-                    <strong style={{ fontSize: 16 }}>
-                      {item.name}
-                    </strong>
+                  <strong className="text-sm">{weekDays[day.weekday]}</strong>
 
-                    <p style={{
-                      margin: '6px 0',
-                      color: '#18763b',
-                      fontWeight: 700,
-                    }}>
-                      {formatCurrency(Number(item.delivery_fee))}
-                    </p>
+                  <label className="text-xs text-slate-500">
+                    Abertura
+                    <input
+                      type="time"
+                      value={day.opening_time.slice(0, 5)}
+                      disabled={day.is_closed}
+                      onChange={e =>
+                        updateScheduleDay(day.weekday, {
+                          opening_time: e.target.value,
+                        })
+                      }
+                      className={inputClass}
+                    />
+                  </label>
 
-                    <span style={{
-                      fontSize: 12,
-                      color: item.is_active ? '#18763b' : '#b42318',
-                    }}>
-                      {item.is_active ? '● Ativo' : '● Desativado'}
-                    </span>
-                  </div>
+                  <label className="text-xs text-slate-500">
+                    Fechamento
+                    <input
+                      type="time"
+                      value={day.closing_time.slice(0, 5)}
+                      disabled={day.is_closed}
+                      onChange={e =>
+                        updateScheduleDay(day.weekday, {
+                          closing_time: e.target.value,
+                        })
+                      }
+                      className={inputClass}
+                    />
+                  </label>
 
-                  <div style={{
-                    display: 'flex',
-                    gap: 8,
-                    flexWrap: 'wrap',
-                  }}>
-                    <button
-                      type="button"
-                      onClick={() => editNeighborhood(item)}
-                      style={{
-                        ...primaryButton,
-                        background: '#555',
-                        padding: '9px 12px',
-                      }}
-                    >
-                      Editar
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => toggleNeighborhood(item)}
-                      style={{
-                        ...primaryButton,
-                        background: item.is_active ? '#b7791f' : '#18763b',
-                        padding: '9px 12px',
-                      }}
-                    >
-                      {item.is_active ? 'Desativar' : 'Ativar'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => deleteNeighborhood(item)}
-                      style={{
-                        ...primaryButton,
-                        background: '#b42318',
-                        padding: '9px 12px',
-                      }}
-                    >
-                      Excluir
-                    </button>
-                  </div>
+                  <label className="flex items-center gap-2 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      checked={day.is_closed}
+                      onChange={e =>
+                        updateScheduleDay(day.weekday, {
+                          is_closed: e.target.checked,
+                        })
+                      }
+                      className="h-4 w-4 accent-blue-600"
+                    />
+                    Fechado
+                  </label>
                 </div>
               ))}
             </div>
-          )}
-        </div>
-      </section>
 
-      <section style={cardStyle}>
-        <h2 style={{ marginTop: 0 }}>
-          Visualizar cardápio
-        </h2>
+            <button
+              type="submit"
+              disabled={savingSchedule}
+              className="mt-5 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+            >
+              {savingSchedule ? 'Salvando horários...' : 'Salvar horários'}
+            </button>
+          </form>
+        </section>
 
-        <p style={{ color: '#777' }}>
-          Este é o endereço público da sua loja:
-        </p>
+        {/* INFORMAÇÕES DA LOJA */}
+        <section className={cardClass}>
+          <div className="mb-6 flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-xl text-violet-700">
+              🏪
+            </div>
+            <div>
+              <h3 className="text-lg font-bold">Informações do restaurante</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Esses dados serão utilizados na apresentação pública da sua loja.
+              </p>
+            </div>
+          </div>
 
-        <a
-          href={`/cardapio/${restaurant.slug}`}
-          target="_blank"
-          rel="noreferrer"
-          style={{
-            color: '#f07835',
-            fontWeight: 600,
-          }}
-        >
-          Abrir meu cardápio
-        </a>
-      </section>
-    </main>
+          <form onSubmit={saveShop} className="grid gap-5 md:grid-cols-2">
+            <label className="text-sm font-medium">
+              Nome do restaurante
+              <input
+                className={inputClass}
+                value={form.name}
+                onChange={e => setForm({ ...form, name: e.target.value })}
+                required
+              />
+            </label>
+
+            <label className="text-sm font-medium">
+              Endereço público do cardápio (slug)
+              <input
+                className={inputClass}
+                value={form.slug}
+                onChange={e =>
+                  setForm({
+                    ...form,
+                    slug: e.target.value
+                      .toLowerCase()
+                      .replace(/[^a-z0-9-]/g, '-'),
+                  })
+                }
+                required
+              />
+            </label>
+
+            <label className="text-sm font-medium">
+              Cidade
+              <input
+                className={inputClass}
+                value={form.city}
+                onChange={e => setForm({ ...form, city: e.target.value })}
+                placeholder="Ex.: Jaguaruana"
+                required
+              />
+            </label>
+
+            <label className="text-sm font-medium">
+              Estado (UF)
+              <input
+                className={inputClass}
+                value={form.state}
+                maxLength={2}
+                onChange={e =>
+                  setForm({
+                    ...form,
+                    state: e.target.value.toUpperCase().replace(/[^A-Z]/g, ''),
+                  })
+                }
+                placeholder="Ex.: CE"
+                required
+              />
+            </label>
+
+            <label className="text-sm font-medium md:col-span-2">
+              Descrição
+              <textarea
+                className={`${inputClass} min-h-24 resize-y`}
+                value={form.description}
+                onChange={e => setForm({ ...form, description: e.target.value })}
+                placeholder="Conte um pouco sobre seu restaurante..."
+              />
+            </label>
+
+            <label className="text-sm font-medium">
+              Telefone / WhatsApp
+              <input
+                className={inputClass}
+                value={form.phone}
+                onChange={e => setForm({ ...form, phone: e.target.value })}
+                placeholder="(88) 99999-9999"
+              />
+            </label>
+
+            <label className="text-sm font-medium">
+              Endereço
+              <textarea
+                className={`${inputClass} min-h-12 resize-y`}
+                value={form.address}
+                onChange={e => setForm({ ...form, address: e.target.value })}
+                placeholder="Rua, número e bairro"
+              />
+            </label>
+
+            <div className="md:col-span-2">
+              <label className="text-sm font-medium">
+                Logotipo do restaurante
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={e => setLogoFile(e.target.files?.[0] || null)}
+                  className={inputClass}
+                />
+              </label>
+
+              <p className="mt-2 text-xs text-slate-400">
+                Formatos JPG, PNG ou WebP. Tamanho máximo: 5 MB.
+              </p>
+
+              {restaurant.logo_url && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-medium text-slate-500">
+                    Logotipo atual
+                  </p>
+                  <img
+                    src={restaurant.logo_url}
+                    alt="Logotipo do restaurante"
+                    className="h-28 w-28 rounded-xl border border-slate-200 bg-white object-contain p-2"
+                  />
+                </div>
+              )}
+
+              {logoFile && (
+                <p className="mt-2 text-xs text-emerald-600">
+                  Nova imagem selecionada: {logoFile.name}
+                </p>
+              )}
+            </div>
+
+            <div className="md:col-span-2">
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+              >
+                {saving ? 'Salvando...' : 'Salvar alterações'}
+              </button>
+            </div>
+          </form>
+        </section>
+
+        {/* MODO DE ENTREGA */}
+        <section className={cardClass}>
+          <div className="mb-5 flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-xl text-emerald-700">
+              🚚
+            </div>
+            <div>
+              <h3 className="text-lg font-bold">Modo de entrega</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Escolha como o sistema validará o endereço do cliente.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${
+              deliveryMode === 'simple'
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-slate-200 hover:bg-slate-50'
+            }`}>
+              <input
+                type="radio"
+                name="deliveryMode"
+                checked={deliveryMode === 'simple'}
+                onChange={() => setDeliveryMode('simple')}
+                className="mt-1 accent-blue-600"
+              />
+              <span>
+                <strong className="text-sm">Entrega por bairro</strong>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  O cliente informa o bairro. O sistema verifica se ele está
+                  cadastrado e calcula a taxa de entrega.
+                </p>
+              </span>
+            </label>
+
+            <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${
+              deliveryMode === 'gps'
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-slate-200 hover:bg-slate-50'
+            }`}>
+              <input
+                type="radio"
+                name="deliveryMode"
+                checked={deliveryMode === 'gps'}
+                onChange={() => setDeliveryMode('gps')}
+                className="mt-1 accent-blue-600"
+              />
+              <span>
+                <strong className="text-sm">Entrega por bairro + GPS</strong>
+                <p className="mt-1 text-xs leading-5 text-slate-500">
+                  Além de conferir o bairro, o sistema verifica a localização
+                  do cliente dentro da área de entrega.
+                </p>
+              </span>
+            </label>
+          </div>
+
+          <button
+            type="button"
+            onClick={saveDeliveryMode}
+            disabled={savingDeliveryMode}
+            className="mt-5 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+          >
+            {savingDeliveryMode ? 'Salvando...' : 'Salvar modo de entrega'}
+          </button>
+        </section>
+
+        {/* BAIRROS */}
+        <section className={cardClass}>
+          <div className="mb-5 flex items-start gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-xl text-amber-700">
+              📍
+            </div>
+            <div>
+              <h3 className="text-lg font-bold">Taxas de entrega por bairro</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                Cadastre as regiões atendidas e defina o valor de cada entrega.
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={saveNeighborhood} className="grid gap-4 md:grid-cols-2">
+            <label className="text-sm font-medium">
+              Nome do bairro
+              <input
+                className={inputClass}
+                value={neighborhoodName}
+                onChange={e => setNeighborhoodName(e.target.value)}
+                placeholder="Ex.: Centro"
+                required
+              />
+            </label>
+
+            <label className="text-sm font-medium">
+              Taxa de entrega (R$)
+              <input
+                className={inputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={neighborhoodFee}
+                onChange={e => setNeighborhoodFee(e.target.value)}
+                placeholder="Ex.: 5,00"
+                required
+              />
+            </label>
+
+            <div className="flex flex-wrap gap-3 md:col-span-2">
+              <button
+                type="submit"
+                disabled={savingNeighborhood}
+                className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
+              >
+                {savingNeighborhood
+                  ? 'Salvando...'
+                  : editingId
+                    ? 'Salvar bairro'
+                    : '+ Adicionar bairro'}
+              </button>
+
+              {editingId && (
+                <button
+                  type="button"
+                  onClick={cancelEdit}
+                  className="rounded-xl bg-slate-200 px-6 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-300"
+                >
+                  Cancelar edição
+                </button>
+              )}
+            </div>
+          </form>
+
+          <div className="mt-7 border-t border-slate-100 pt-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h4 className="font-bold">
+                Bairros cadastrados
+              </h4>
+              <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                {neighborhoods.length} cadastrados
+              </span>
+            </div>
+
+            {loadingNeighborhoods ? (
+              <p className="py-6 text-center text-sm text-slate-500">
+                Carregando bairros...
+              </p>
+            ) : neighborhoods.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
+                <span className="text-3xl">📍</span>
+                <p className="mt-3 font-semibold">
+                  Nenhum bairro cadastrado
+                </p>
+                <p className="mt-1 text-sm text-slate-500">
+                  Adicione os bairros onde seu restaurante realiza entregas.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {neighborhoods.map(item => (
+                  <div
+                    key={item.id}
+                    className="flex flex-col gap-4 rounded-xl border border-slate-200 p-4 transition hover:border-blue-200 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="font-semibold">{item.name}</p>
+                      <p className="mt-1 text-lg font-bold text-emerald-600">
+                        {formatCurrency(Number(item.delivery_fee))}
+                      </p>
+                      <span className={`text-xs font-medium ${
+                        item.is_active ? 'text-emerald-600' : 'text-red-600'
+                      }`}>
+                        {item.is_active ? '● Ativo' : '● Desativado'}
+                      </span>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={() => editNeighborhood(item)}
+                        className="rounded-lg bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-200"
+                      >
+                        Editar
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => toggleNeighborhood(item)}
+                        className={`rounded-lg px-3 py-2 text-xs font-semibold ${
+                          item.is_active
+                            ? 'bg-amber-50 text-amber-700 hover:bg-amber-100'
+                            : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                        }`}
+                      >
+                        {item.is_active ? 'Desativar' : 'Ativar'}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => deleteNeighborhood(item)}
+                        className="rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 hover:bg-red-100"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* CARDÁPIO PÚBLICO */}
+        <section className="mb-6 rounded-2xl bg-gradient-to-r from-blue-700 to-blue-500 p-6 text-white shadow-sm">
+          <h3 className="text-lg font-bold">Seu cardápio está pronto?</h3>
+          <p className="mt-2 text-sm text-blue-100">
+            Acesse a página pública do restaurante para conferir como seus clientes visualizam a loja.
+          </p>
+          <a
+            href={`/cardapio/${restaurant.slug}`}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-5 inline-flex rounded-xl bg-white px-5 py-3 text-sm font-bold text-blue-700 transition hover:bg-blue-50"
+          >
+            Visualizar meu cardápio →
+          </a>
+        </section>
+
+        <footer className="mt-10 border-t border-slate-200 pt-5 text-xs text-slate-400">
+          MenuFlow · Painel do restaurante
+        </footer>
+      </main>
+    </div>
   )
 }

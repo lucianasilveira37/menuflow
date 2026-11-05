@@ -1,374 +1,137 @@
-
-'use client'
-
-import { useState, type FormEvent } from 'react'
-import { useRouter } from 'next/navigation'
-import { supabase } from './lib/supabase'
+import Link from "next/link";
 
 export default function Home() {
-  const router = useRouter()
-
-  const [modo, setModo] = useState<'login' | 'cadastro'>('login')
-
-  const [nome, setNome] = useState('')
-  const [empresa, setEmpresa] = useState('')
-  const [telefone, setTelefone] = useState('')
-  const [email, setEmail] = useState('')
-  const [senha, setSenha] = useState('')
-  const [confirmarSenha, setConfirmarSenha] = useState('')
-
-  const [erro, setErro] = useState('')
-  const [sucesso, setSucesso] = useState('')
-  const [carregando, setCarregando] = useState(false)
-
-  async function entrar(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setErro('')
-    setSucesso('')
-    setCarregando(true)
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password: senha,
-      })
-
-      if (error) {
-        setErro('E-mail ou senha incorretos. Verifique também se confirmou seu e-mail.')
-        return
-      }
-
-      if (!data.user) {
-        setErro('Não foi possível identificar o usuário.')
-        return
-      }
-
-      const { data: admin, error: adminError } = await supabase
-        .from('platform_admins')
-        .select('user_id')
-        .eq('user_id', data.user.id)
-        .maybeSingle()
-
-      if (adminError) {
-        setErro('Não foi possível verificar suas permissões.')
-        return
-      }
-
-      if (admin) {
-        router.replace('/superadmin')
-        return
-      }
-
-      const { data: membership, error: membershipError } = await supabase
-        .from('memberships')
-        .select('restaurant_id')
-        .eq('user_id', data.user.id)
-        .maybeSingle()
-
-      if (membershipError) {
-        setErro('Não foi possível verificar seu estabelecimento.')
-        return
-      }
-
-      if (membership) {
-        router.replace('/painel')
-        return
-      }
-
-      const { data: request, error: requestError } = await supabase
-        .from('restaurant_requests')
-        .select('status, rejection_reason')
-        .eq('user_id', data.user.id)
-        .maybeSingle()
-
-      if (requestError) {
-        setErro('Não foi possível consultar sua solicitação.')
-        return
-      }
-
-      if (request?.status === 'pending') {
-        setErro('Sua solicitação está aguardando aprovação do MenuFlow.')
-      } else if (request?.status === 'rejected') {
-        setErro(
-          request.rejection_reason
-            ? `Sua solicitação foi recusada. Motivo: ${request.rejection_reason}`
-            : 'Sua solicitação foi recusada. Entre em contato com o suporte.'
-        )
-      } else {
-        setErro('Sua conta ainda não possui um estabelecimento aprovado.')
-      }
-    } catch (error) {
-      console.error('Erro no login:', error)
-      setErro('Ocorreu um erro ao entrar. Tente novamente.')
-    } finally {
-      setCarregando(false)
-    }
-  }
-
-  async function cadastrar(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault()
-    setErro('')
-    setSucesso('')
-
-    if (senha.length < 6) {
-      setErro('A senha precisa ter pelo menos 6 caracteres.')
-      return
-    }
-
-    if (senha !== confirmarSenha) {
-      setErro('As senhas não são iguais.')
-      return
-    }
-
-    setCarregando(true)
-
-    try {
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: senha,
-        options: {
-          emailRedirectTo: 'http://localhost:3000',
-          data: {
-            registration_type: 'restaurant',
-            contact_name: nome.trim(),
-            business_name: empresa.trim(),
-            phone: telefone.trim(),
-          },
-        },
-      })
-
-      if (error) {
-        setErro(error.message)
-        return
-      }
-
-      if (!data.user) {
-        setErro('Não foi possível criar sua conta. Tente novamente.')
-        return
-      }
-
-      setSucesso(
-        'Conta criada! Enviamos um e-mail de confirmação. Confirme seu endereço de e-mail para que sua solicitação possa ser analisada pelo MenuFlow. Depois, aguarde a aprovação do estabelecimento.'
-      )
-
-      setNome('')
-      setEmpresa('')
-      setTelefone('')
-      setEmail('')
-      setSenha('')
-      setConfirmarSenha('')
-    } catch (error) {
-      console.error('Erro no cadastro:', error)
-      setErro('Ocorreu um erro ao criar sua conta. Tente novamente.')
-    } finally {
-      setCarregando(false)
-    }
-  }
-
-  function trocarModo(novoModo: 'login' | 'cadastro') {
-    setModo(novoModo)
-    setErro('')
-    setSucesso('')
-  }
-
   return (
-    <main style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: '#f4f5f7',
-      padding: 20
-    }}>
-      <form
-        onSubmit={modo === 'login' ? entrar : cadastrar}
-        style={{
-          background: '#ffffff',
-          padding: 35,
-          borderRadius: 16,
-          width: '100%',
-          maxWidth: 430,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.08)'
-        }}
-      >
-        <h1 style={{ fontSize: 30, marginBottom: 8 }}>
-          MenuFlow
-        </h1>
+    <main className="min-h-screen bg-[#f7f8f5] text-[#183b2b]">
+      <header className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-6">
+        <Link href="/" className="flex items-center gap-2">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1d5b3b] text-xl font-bold text-white">
+            M
+          </div>
 
-        <p style={{ color: '#666', marginBottom: 25 }}>
-          {modo === 'login'
-            ? 'Entre na sua conta para continuar.'
-            : 'Crie sua conta e solicite o cadastro do seu estabelecimento.'}
-        </p>
+          <span className="text-2xl font-extrabold tracking-tight">
+            Menu<span className="text-[#d49a35]">Flow</span>
+          </span>
+        </Link>
 
-        {modo === 'cadastro' && (
-          <>
-            <label>Nome completo</label>
-            <input
-              type="text"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              required
-              autoComplete="name"
-              style={estiloInput}
-            />
-
-            <label>Nome da empresa ou estabelecimento</label>
-            <input
-              type="text"
-              value={empresa}
-              onChange={(e) => setEmpresa(e.target.value)}
-              required
-              style={estiloInput}
-            />
-
-            <label>Telefone / WhatsApp</label>
-            <input
-              type="tel"
-              value={telefone}
-              onChange={(e) => setTelefone(e.target.value)}
-              required
-              autoComplete="tel"
-              style={estiloInput}
-            />
-          </>
-        )}
-
-        <label>E-mail</label>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          autoComplete="email"
-          style={estiloInput}
-        />
-
-        <label>Senha</label>
-        <input
-          type="password"
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-          required
-          minLength={6}
-          autoComplete={modo === 'login' ? 'current-password' : 'new-password'}
-          style={estiloInput}
-        />
-
-        {modo === 'cadastro' && (
-          <>
-            <label>Confirmar senha</label>
-            <input
-              type="password"
-              value={confirmarSenha}
-              onChange={(e) => setConfirmarSenha(e.target.value)}
-              required
-              minLength={6}
-              autoComplete="new-password"
-              style={estiloInput}
-            />
-          </>
-        )}
-
-        {erro && (
-          <p style={{
-            color: '#dc2626',
-            background: '#fef2f2',
-            padding: 12,
-            borderRadius: 8,
-            marginBottom: 15,
-            fontSize: 14
-          }}>
-            {erro}
-          </p>
-        )}
-
-        {sucesso && (
-          <p style={{
-            color: '#166534',
-            background: '#f0fdf4',
-            padding: 12,
-            borderRadius: 8,
-            marginBottom: 15,
-            fontSize: 14
-          }}>
-            {sucesso}
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={carregando}
-          style={{
-            width: '100%',
-            padding: 14,
-            background: '#16a34a',
-            color: 'white',
-            border: 'none',
-            borderRadius: 8,
-            fontWeight: 'bold',
-            cursor: carregando ? 'not-allowed' : 'pointer',
-            opacity: carregando ? 0.7 : 1,
-            marginTop: 5
-          }}
+        <Link
+          href="/login"
+          className="rounded-full border border-[#1d5b3b] px-5 py-2.5 text-sm font-semibold transition hover:bg-[#1d5b3b] hover:text-white"
         >
-          {carregando
-            ? 'Aguarde...'
-            : modo === 'login'
-              ? 'Entrar'
-              : 'Criar minha conta'}
-        </button>
+          Entrar
+        </Link>
+      </header>
 
-        <div style={{
-          textAlign: 'center',
-          marginTop: 22,
-          fontSize: 14
-        }}>
-          {modo === 'login' ? (
-            <p style={{ color: '#666' }}>
-              Não tem conta?{' '}
-              <button
-                type="button"
-                onClick={() => trocarModo('cadastro')}
-                style={estiloLink}
-              >
-                Criar minha conta
-              </button>
-            </p>
-          ) : (
-            <p style={{ color: '#666' }}>
-              Já tem conta?{' '}
-              <button
-                type="button"
-                onClick={() => trocarModo('login')}
-                style={estiloLink}
-              >
-                Já tenho conta
-              </button>
-            </p>
-          )}
+      <section className="mx-auto grid min-h-[75vh] max-w-7xl items-center gap-12 px-6 py-16 md:grid-cols-2 md:py-24">
+        <div className="max-w-xl">
+          <span className="mb-6 inline-flex rounded-full bg-[#e6efe8] px-4 py-2 text-sm font-semibold text-[#286344]">
+            Bem-vindo ao MenuFlow
+          </span>
+
+          <h1 className="text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl lg:text-6xl">
+            Seu próximo pedido começa{" "}
+            <span className="text-[#d49a35]">aqui.</span>
+          </h1>
+
+          <p className="mt-6 max-w-lg text-lg leading-8 text-gray-600">
+            Encontre restaurantes, conheça cardápios e faça seus pedidos de
+            maneira simples, rápida e prática.
+          </p>
+
+          <div className="mt-9 flex flex-col gap-3 sm:flex-row">
+            <Link
+              href="/login"
+              className="rounded-xl bg-[#1d5b3b] px-8 py-4 text-center font-bold text-white shadow-lg shadow-green-900/10 transition hover:-translate-y-0.5 hover:bg-[#16482e]"
+            >
+              Acessar minha conta
+            </Link>
+
+            <Link
+              href="/login?cadastro=true"
+              className="rounded-xl border border-[#d8ded8] bg-white px-8 py-4 text-center font-bold text-[#1d5b3b] transition hover:border-[#1d5b3b] hover:bg-[#f0f5f0]"
+            >
+              Criar minha conta
+            </Link>
+          </div>
+
+          <p className="mt-6 text-sm text-gray-500">
+            Já tem uma conta? Entre e continue de onde parou.
+          </p>
         </div>
-      </form>
+
+        <div className="relative mx-auto w-full max-w-lg">
+          <div className="absolute -left-5 -top-5 h-28 w-28 rounded-full bg-[#e8d6ad] opacity-60 blur-2xl" />
+          <div className="absolute -bottom-5 -right-5 h-36 w-36 rounded-full bg-[#c9dfcf] opacity-70 blur-2xl" />
+
+          <div className="relative rounded-[2rem] border border-white bg-white p-6 shadow-2xl shadow-green-950/10 sm:p-9">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-500">
+                  Uma experiência
+                </p>
+                <h2 className="mt-1 text-2xl font-extrabold">
+                  Mais prática.
+                </h2>
+              </div>
+
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e8f1e9] text-2xl">
+                🍽️
+              </div>
+            </div>
+
+            <div className="mt-8 space-y-4">
+              <div className="flex items-center gap-4 rounded-2xl bg-[#f7f8f5] p-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#e5eee6] text-xl">
+                  🔎
+                </div>
+                <div>
+                  <h3 className="font-bold">Encontre restaurantes</h3>
+                  <p className="text-sm text-gray-500">
+                    Descubra opções disponíveis.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 rounded-2xl bg-[#f7f8f5] p-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#f6edda] text-xl">
+                  📋
+                </div>
+                <div>
+                  <h3 className="font-bold">Explore os cardápios</h3>
+                  <p className="text-sm text-gray-500">
+                    Escolha seus pratos favoritos.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4 rounded-2xl bg-[#f7f8f5] p-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#e5eee6] text-xl">
+                  🛵
+                </div>
+                <div>
+                  <h3 className="font-bold">Faça seu pedido</h3>
+                  <p className="text-sm text-gray-500">
+                    Tudo de forma simples e rápida.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-7 rounded-2xl bg-[#1d5b3b] p-5 text-white">
+              <p className="text-sm text-white/75">
+                Sua experiência começa agora
+              </p>
+              <p className="mt-1 text-xl font-bold">
+                Bem-vindo ao MenuFlow!
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer className="border-t border-[#e5e9e3] px-6 py-6 text-center text-sm text-gray-500">
+        © {new Date().getFullYear()} MenuFlow. Todos os direitos reservados.
+      </footer>
     </main>
-  )
-}
-
-const estiloInput = {
-  width: '100%',
-  padding: 12,
-  marginTop: 8,
-  marginBottom: 18,
-  border: '1px solid #ddd',
-  borderRadius: 8,
-  boxSizing: 'border-box' as const,
-}
-
-const estiloLink = {
-  background: 'none',
-  border: 'none',
-  color: '#16a34a',
-  fontWeight: 'bold',
-  cursor: 'pointer',
-  padding: 0,
-  fontSize: 14,
+  );
 }
