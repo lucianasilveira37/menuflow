@@ -10,8 +10,9 @@ type Props = {
 };
 
 async function MesaContent({ params }: Props) {
- const { token } = await params;
-await connection();
+  await connection();
+
+  const { token } = await params;
 
   const { data, error } = await supabase.rpc(
     "get_public_table_info",
