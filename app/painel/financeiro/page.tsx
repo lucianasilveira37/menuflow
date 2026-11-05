@@ -53,9 +53,11 @@ export default function FinanceiroPage() {
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('other')
   const [amount, setAmount] = useState('')
-  const [expenseDate, setExpenseDate] = useState(
-    new Date().toLocaleDateString('en-CA')
-  )
+ const [expenseDate, setExpenseDate] = useState('')
+
+useEffect(() => {
+  setExpenseDate(new Date().toLocaleDateString('en-CA'))
+}, [])
   const [notes, setNotes] = useState('')
 
   async function loadExpenses() {
