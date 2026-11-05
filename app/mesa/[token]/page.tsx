@@ -1,4 +1,4 @@
-export const instant = false;
+export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
 import PublicMenu from "../../cardapio/[slug]/PublicMenu";
