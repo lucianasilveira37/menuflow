@@ -1,6 +1,12 @@
+
+'use client'
+
 import Link from "next/link";
+import { useState } from "react";
 
 export default function Home() {
+  const [videoFinished, setVideoFinished] = useState(false);
+
   return (
     <main className="min-h-screen bg-[#f7f8f5] text-[#183b2b]">
       <header className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-6">
@@ -21,6 +27,31 @@ export default function Home() {
           Entrar
         </Link>
       </header>
+
+      {!videoFinished && (
+        <section id="demo" className="mx-auto max-w-5xl px-6 pb-20">
+          <div className="mb-8 text-center">
+            <h2 className="text-3xl font-extrabold tracking-tight">
+              Veja o MenuFlow em <span className="text-[#d49a35]">ação</span>
+            </h2>
+
+            <p className="mt-3 text-gray-600">
+              Em menos de um minuto, conheça o cardápio, os pedidos e o painel do restaurante.
+            </p>
+          </div>
+
+          <video
+            src="/menuflow-demo.mp4"
+            autoPlay
+            muted
+            playsInline
+            controls
+            preload="metadata"
+            onEnded={() => setVideoFinished(true)}
+            className="w-full rounded-3xl border border-white shadow-2xl shadow-green-950/10"
+          />
+        </section>
+      )}
 
       <section className="mx-auto grid min-h-[75vh] max-w-7xl items-center gap-12 px-6 py-16 md:grid-cols-2 md:py-24">
         <div className="max-w-xl">
