@@ -78,6 +78,17 @@ function AcompanharPedidoContent() {
     order?.status === 'received' ||
     order?.status === 'confirmed'
 
+  // Link do WhatsApp do restaurante
+  function getWhatsAppLink() {
+    const phone = '5588993070295'
+
+    const message = encodeURIComponent(
+      `Olá! Gostaria de falar sobre meu pedido #${id.slice(0, 8)}.`
+    )
+
+    return `https://wa.me/${phone}?text=${message}`
+  }
+
   useEffect(() => {
     let active = true
 
@@ -285,7 +296,6 @@ function AcompanharPedidoContent() {
         'Produtos adicionados ao seu pedido com sucesso!'
       )
 
-      // Atualiza imediatamente os valores e os itens do pedido.
       const { data: updatedOrder, error: refreshError } =
         await supabase.rpc('get_public_order_status', {
           p_order_id: id,
@@ -447,27 +457,26 @@ function AcompanharPedidoContent() {
                 : '🍽️ Consumo no local'}
           </p>
 
-         {isDelivery && (
-  <>
-    <p>
-      <strong>Endereço:</strong>{' '}
-      {order.delivery_address || 'Não informado'}
-    </p>
+          {isDelivery && (
+            <>
+              <p>
+                <strong>Endereço:</strong>{' '}
+                {order.delivery_address || 'Não informado'}
+              </p>
 
-    <p>
-      <strong>Bairro:</strong>{' '}
-      {order.delivery_neighborhood || 'Não informado'}
-    </p>
+              <p>
+                <strong>Bairro:</strong>{' '}
+                {order.delivery_neighborhood || 'Não informado'}
+              </p>
 
-    <p>
-      <strong>Taxa de entrega:</strong>{' '}
-      {currency(order.delivery_fee)}
-    </p>
-  </>
-)}
+              <p>
+                <strong>Taxa de entrega:</strong>{' '}
+                {currency(order.delivery_fee)}
+              </p>
+            </>
+          )}
         </div>
 
-        {/* Produtos já vinculados ao pedido */}
         <div
           style={{
             marginTop: '25px',
@@ -541,7 +550,6 @@ function AcompanharPedidoContent() {
           </div>
         </div>
 
-        {/* Área de acréscimo de produtos */}
         {canAddItems && order.status !== 'cancelled' && (
           <section
             style={{
@@ -1000,6 +1008,27 @@ function AcompanharPedidoContent() {
           🔄 O acompanhamento é atualizado automaticamente.
         </div>
       </section>
+
+      {/* Botão flutuante do WhatsApp */}
+      <a
+        href={getWhatsAppLink()}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="whatsapp-float"
+        aria-label="Falar com o restaurante pelo WhatsApp"
+      >
+        <svg
+          viewBox="0 0 32 32"
+          width="28"
+          height="28"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M16 .5A15.4 15.4 0 0 0 2.7 23.7L.5 31.5l8-2.1A15.5 15.5 0 1 0 16 .5Zm0 28.2c-2.3 0-4.5-.6-6.4-1.8l-.5-.3-4.7 1.2 1.3-4.6-.3-.5A12.7 12.7 0 1 1 16 28.7Zm7-9.5c-.4-.2-2.1-1-2.5-1.1-.3-.1-.6-.2-.8.2-.3.4-.9 1.1-1.1 1.3-.2.2-.4.3-.8.1-.4-.2-1.5-.6-2.9-1.8-1.1-1-1.8-2.1-2-2.5-.2-.4 0-.6.2-.8l.6-.7c.2-.2.3-.4.4-.6.1-.2 0-.5 0-.7-.1-.2-.8-1.9-1.1-2.6-.3-.7-.6-.6-.8-.6h-.7c-.2 0-.7.1-1 .5-.4.4-1.3 1.3-1.3 3s1.3 3.3 1.5 3.5c.2.2 2.6 4 6.3 5.5.9.4 1.6.6 2.1.7.9.3 1.7.2 2.3.1.7-.1 2.1-.9 2.4-1.7.3-.8.3-1.5.2-1.7-.1-.1-.4-.3-.8-.5Z" />
+        </svg>
+
+        <span>Falar com o restaurante</span>
+      </a>
     </main>
   )
 }
