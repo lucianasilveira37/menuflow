@@ -502,9 +502,9 @@ export default function Home() {
 
         </div>
 
-        <div className="mx-auto mt-12 max-w-7xl border-t border-white/10 pt-7 text-center text-xs text-slate-500">
-          © {new Date().getFullYear()} © 2026 MenuFlow. Todos os direitos reservados.
-        </div>
+       <div className="mx-auto mt-12 max-w-7xl border-t border-white/10 pt-7 text-center text-xs text-slate-400">
+  © 2026 MenuFlow. Todos os direitos reservados.
+</div>
 
       </footer>
 
