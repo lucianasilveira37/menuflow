@@ -1,9 +1,10 @@
 
 'use client'
 
-import { Suspense, useState, type FormEvent } from 'react'
+import { Suspense, useEffect, useState, type FormEvent } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '../lib/supabase'
+
 
 type TipoCadastro = 'restaurant' | 'customer'
 type Modo = 'login' | 'cadastro' | 'recuperar'
@@ -12,9 +13,12 @@ function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
 
-  const [modo, setModo] = useState<Modo>(
-    searchParams.get('cadastro') === 'true' ? 'cadastro' : 'login'
-  )
+  const [modo, setModo] = useState<Modo>('login')
+
+useEffect(() => {
+  const cadastro = searchParams.get('cadastro') === 'true'
+  setModo(cadastro ? 'cadastro' : 'login')
+}, [searchParams])
 
   const [tipoCadastro, setTipoCadastro] =
     useState<TipoCadastro>('restaurant')
