@@ -1,15 +1,17 @@
 
 import type { ReactNode } from "react";
+import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { createSupabaseServer } from "../lib/supabase-server";
 
-export const instant = false;
-
-export default async function SuperAdminLayout({
+async function SuperAdminAuth({
   children,
 }: {
   children: ReactNode;
 }) {
+  await connection();
+
   const supabase = await createSupabaseServer();
 
   const {
@@ -32,4 +34,16 @@ export default async function SuperAdminLayout({
   }
 
   return <>{children}</>;
+}
+
+export default function SuperAdminLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <Suspense fallback={<div>Verificando acesso...</div>}>
+      <SuperAdminAuth>{children}</SuperAdminAuth>
+    </Suspense>
+  );
 }
