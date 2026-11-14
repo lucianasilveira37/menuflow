@@ -1,0 +1,400 @@
+[1mdiff --git a/app/login/page.tsx b/app/login/page.tsx[m
+[1mindex 66e71be..042ca7d 100644[m
+[1m--- a/app/login/page.tsx[m
+[1m+++ b/app/login/page.tsx[m
+[36m@@ -5,21 +5,44 @@[m [mimport { Suspense, useEffect, useState, type FormEvent } from 'react'[m
+ import { useRouter, useSearchParams } from 'next/navigation'[m
+ import { supabase } from '../lib/supabase'[m
+ [m
+[31m-[m
+ type TipoCadastro = 'restaurant' | 'customer'[m
+[31m-type Modo = 'login' | 'cadastro' | 'recuperar'[m
+[32m+[m[32mtype Modo =[m
+[32m+[m[32m  | 'login'[m
+[32m+[m[32m  | 'cadastro'[m
+[32m+[m[32m  | 'recuperar'[m
+[32m+[m[32m  | 'cadastro-cliente'[m
+[32m+[m[32m  | 'cadastro-estabelecimento'[m
+[32m+[m
+[32m+[m[32mtype EstadoIBGE = {[m
+[32m+[m[32m  id: number[m
+[32m+[m[32m  sigla: string[m
+[32m+[m[32m  nome: string[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mtype MunicipioIBGE = {[m
+[32m+[m[32m  id: number[m
+[32m+[m[32m  nome: string[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mtype ViaCepResposta = {[m
+[32m+[m[32m  cep?: string[m
+[32m+[m[32m  logradouro?: string[m
+[32m+[m[32m  bairro?: string[m
+[32m+[m[32m  complemento?: string[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mtype CepOpcao = {[m
+[32m+[m[32m  cep: string[m
+[32m+[m[32m  logradouro: string[m
+[32m+[m[32m  bairro: string[m
+[32m+[m[32m  complemento: string[m
+[32m+[m[32m}[m
+ [m
+ function LoginContent() {[m
+   const router = useRouter()[m
+   const searchParams = useSearchParams()[m
+ [m
+   const [modo, setModo] = useState<Modo>('login')[m
+[31m-[m
+[31m-useEffect(() => {[m
+[31m-  const cadastro = searchParams.get('cadastro') === 'true'[m
+[31m-  setModo(cadastro ? 'cadastro' : 'login')[m
+[31m-}, [searchParams])[m
+[31m-[m
+   const [tipoCadastro, setTipoCadastro] =[m
+     useState<TipoCadastro>('restaurant')[m
+ [m
+[36m@@ -38,10 +61,51 @@[m [museEffect(() => {[m
+   const [estado, setEstado] = useState('')[m
+   const [senha, setSenha] = useState('')[m
+   const [confirmarSenha, setConfirmarSenha] = useState('')[m
+[32m+[m
+   const [erro, setErro] = useState('')[m
+   const [sucesso, setSucesso] = useState('')[m
+   const [carregando, setCarregando] = useState(false)[m
+ [m
+[32m+[m[32m  const [estados, setEstados] = useState<EstadoIBGE[]>([])[m
+[32m+[m[32m  const [municipios, setMunicipios] = useState<MunicipioIBGE[]>([])[m
+[32m+[m[32m  const [carregandoEstados, setCarregandoEstados] = useState(false)[m
+[32m+[m[32m  const [carregandoMunicipios, setCarregandoMunicipios] = useState(false)[m
+[32m+[m[32m  const [erroEstados, setErroEstados] = useState('')[m
+[32m+[m[32m  const [erroMunicipios, setErroMunicipios] = useState('')[m
+[32m+[m
+[32m+[m[32m  const [cepsEncontrados, setCepsEncontrados] = useState<CepOpcao[]>([])[m
+[32m+[m[32m  const [buscandoCep, setBuscandoCep] = useState(false)[m
+[32m+[m[32m  const [statusCep, setStatusCep] = useState('')[m
+[32m+[m
+[32m+[m[32m  const [mostrarEscolhaAcesso, setMostrarEscolhaAcesso] = useState(false)[m
+[32m+[m[32m  const [temAcessoCliente, setTemAcessoCliente] = useState(false)[m
+[32m+[m[32m  const [temAcessoEstabelecimento, setTemAcessoEstabelecimento] =[m
+[32m+[m[32m    useState(false)[m
+[32m+[m[32m  const [statusSolicitacao, setStatusSolicitacao] = useState('')[m
+[32m+[m[32m  const [motivoRejeicao, setMotivoRejeicao] = useState('')[m
+[32m+[m[32m  const [nomeUsuario, setNomeUsuario] = useState('')[m
+[32m+[m[32m  const [cpfCliente, setCpfCliente] = useState('')[m
+[32m+[m
+[32m+[m[32m  const modoCadastro =[m
+[32m+[m[32m    modo === 'cadastro' ||[m
+[32m+[m[32m    modo === 'cadastro-cliente' ||[m
+[32m+[m[32m    modo === 'cadastro-estabelecimento'[m
+[32m+[m
+[32m+[m[32m  const cadastroClienteExistente = modo === 'cadastro-cliente'[m
+[32m+[m[32m  const cadastroEstabelecimentoExistente =[m
+[32m+[m[32m    modo === 'cadastro-estabelecimento'[m
+[32m+[m
+[32m+[m[32m  const tipoAtual: TipoCadastro = cadastroClienteExistente[m
+[32m+[m[32m    ? 'customer'[m
+[32m+[m[32m    : cadastroEstabelecimentoExistente[m
+[32m+[m[32m      ? 'restaurant'[m
+[32m+[m[32m      : tipoCadastro[m
+[32m+[m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    const cadastro = searchParams.get('cadastro') === 'true'[m
+[32m+[m[32m    setModo(cadastro ? 'cadastro' : 'login')[m
+[32m+[m[32m  }, [searchParams])[m
+[32m+[m
+   function somenteNumeros(valor: string) {[m
+     return valor.replace(/\D/g, '')[m
+   }[m
+[36m@@ -110,115 +174,497 @@[m [museEffect(() => {[m
+     )[m
+   }[m
+ [m
+[31m-  async function entrar(e: FormEvent<HTMLFormElement>) {[m
+[31m-    e.preventDefault()[m
+[31m-    setErro('')[m
+[31m-    setSucesso('')[m
+[31m-    setCarregando(true)[m
+[32m+[m[32m  // Carrega os estados brasileiros.[m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    const controller = new AbortController()[m
+ [m
+[31m-    try {[m
+[31m-      const { data, error } = await supabase.auth.signInWithPassword({[m
+[31m-        email: email.trim().toLowerCase(),[m
+[31m-        password: senha,[m
+[31m-      })[m
+[32m+[m[32m    async function carregarEstados() {[m
+[32m+[m[32m      setCarregandoEstados(true)[m
+[32m+[m[32m      setErroEstados('')[m
+ [m
+[31m-      if (error) {[m
+[31m-        setErro([m
+[31m-          'E-mail ou senha incorretos. Verifique também se confirmou seu e-mail.'[m
+[32m+[m[32m      try {[m
+[32m+[m[32m        const resposta = await fetch([m
+[32m+[m[32m          'https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome',[m
+[32m+[m[32m          { signal: controller.signal }[m
+         )[m
+[31m-        return[m
+[31m-      }[m
+[31m-[m
+[31m-      if (!data.user) {[m
+[31m-        setErro('Não foi possível identificar o usuário.')[m
+[31m-        return[m
+[31m-      }[m
+ [m
+[31m-      const { data: admin, error: adminError } = await supabase[m
+[31m-        .from('platform_admins')[m
+[31m-        .select('user_id')[m
+[31m-        .eq('user_id', data.user.id)[m
+[31m-        .maybeSingle()[m
+[32m+[m[32m        if (!resposta.ok) {[m
+[32m+[m[32m          throw new Error('Não foi possível carregar os estados.')[m
+[32m+[m[32m        }[m
+ [m
+[31m-      if (adminError) {[m
+[31m-        setErro('Não foi possível verificar suas permissões.')[m
+[31m-        return[m
+[32m+[m[32m        const dados: EstadoIBGE[] = await resposta.json()[m
+[32m+[m[32m        setEstados(dados)[m
+[32m+[m[32m      } catch (error) {[m
+[32m+[m[32m        if (!controller.signal.aborted) {[m
+[32m+[m[32m          console.error('Erro ao carregar estados:', error)[m
+[32m+[m[32m          setErroEstados([m
+[32m+[m[32m            'Não foi possível carregar os estados. Atualize a página e tente novamente.'[m
+[32m+[m[32m          )[m
+[32m+[m[32m        }[m
+[32m+[m[32m      } finally {[m
+[32m+[m[32m        if (!controller.signal.aborted) {[m
+[32m+[m[32m          setCarregandoEstados(false)[m
+[32m+[m[32m        }[m
+       }[m
+[32m+[m[32m    }[m
+ [m
+[31m-      if (admin) {[m
+[31m-        router.replace('/superadmin')[m
+[31m-        return[m
+[31m-      }[m
+[32m+[m[32m    carregarEstados()[m
+ [m
+[31m-      const { data: membership, error: membershipError } =[m
+[31m-        await supabase[m
+[31m-          .from('memberships')[m
+[31m-          .select('restaurant_id')[m
+[31m-          .eq('user_id', data.user.id)[m
+[31m-          .maybeSingle()[m
+[32m+[m[32m    return () => controller.abort()[m
+[32m+[m[32m  }, [])[m
+ [m
+[31m-      if (membershipError) {[m
+[31m-        setErro('Não foi possível verificar seu estabelecimento.')[m
+[31m-        return[m
+[31m-      }[m
+[32m+[m[32m  // Carrega os municípios do estado selecionado.[m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    const controller = new AbortController()[m
+ [m
+[31m-      if (membership) {[m
+[31m-        router.replace('/painel')[m
+[31m-        return[m
+[31m-      }[m
+[32m+[m[32m    if (!estado) {[m
+[32m+[m[32m      setMunicipios([])[m
+[32m+[m[32m      setCidade('')[m
+[32m+[m[32m      setErroMunicipios('')[m
+[32m+[m[32m      setCarregandoMunicipios(false)[m
+ [m
+[31m-      const { data: request, error: requestError } = await supabase[m
+[31m-        .from('restaurant_requests')[m
+[31m-        .select('status, rejection_reason')[m
+[31m-        .eq('user_id', data.user.id)[m
+[31m-        .maybeSingle()[m
+[32m+[m[32m      return () => controller.abort()[m
+[32m+[m[32m    }[m
+ [m
+[31m-      if (requestError) {[m
+[31m-        setErro('Não foi possível consultar sua solicitação.')[m
+[31m-        return[m
+[31m-      }[m
+[32m+[m[32m    async function carregarMunicipios() {[m
+[32m+[m[32m      setCarregandoMunicipios(true)[m
+[32m+[m[32m      setMunicipios([])[m
+[32m+[m[32m      setErroMunicipios('')[m
+ [m
+[31m-      if (request?.status === 'pending') {[m
+[31m-        setErro([m
+[31m-          'Sua solicitação está aguardando aprovação do MenuFlow.'[m
+[32m+[m[32m      try {[m
+[32m+[m[32m        const resposta = await fetch([m
+[32m+[m[32m          `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${estado}/municipios?orderBy=nome`,[m
+[32m+[m[32m          { signal: controller.signal }[m
+         )[m
+[31m-        return[m
+[32m+[m
+[32m+[m[32m        if (!resposta.ok) {[m
+[32m+[m[32m          throw new Error('Não foi possível carregar os municípios.')[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        const dados: MunicipioIBGE[] = await resposta.json()[m
+[32m+[m[32m        setMunicipios(dados)[m
+[32m+[m[32m      } catch (error) {[m
+[32m+[m[32m        if (!controller.signal.aborted) {[m
+[32m+[m[32m          console.error('Erro ao carregar municípios:', error)[m
+[32m+[m[32m          setErroMunicipios([m
+[32m+[m[32m            'Não foi possível carregar as cidades. Tente selecionar o estado novamente.'[m
+[32m+[m[32m          )[m
+[32m+[m[32m        }[m
+[32m+[m[32m      } finally {[m
+[32m+[m[32m        if (!controller.signal.aborted) {[m
+[32m+[m[32m          setCarregandoMunicipios(false)[m
+[32m+[m[32m        }[m
+       }[m
+[32m+[m[32m    }[m
+ [m
+[31m-      if (request?.status === 'rejected') {[m
+[31m-        setErro([m
+[31m-          request.rejection_reason[m
+[31m-            ? `Sua solicitação foi recusada. Motivo: ${request.rejection_reason}`[m
+[31m-            : 'Sua solicitação foi recusada. Entre em contato com o suporte.'[m
+[32m+[m[32m    carregarMunicipios()[m
+[32m+[m
+[32m+[m[32m    return () => controller.abort()[m
+[32m+[m[32m  }, [estado])[m
+[32m+[m
+[32m+[m[32m  // Busca CEP sem apagar um CEP que já veio do cadastro existente.[m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    if ([m
+[32m+[m[32m      !modoCadastro ||[m
+[32m+[m[32m      !estado ||[m
+[32m+[m[32m      !cidade ||[m
+[32m+[m[32m      rua.trim().length < 3[m
+[32m+[m[32m    ) {[m
+[32m+[m[32m      setCepsEncontrados([])[m
+[32m+[m[32m      setStatusCep('')[m
+[32m+[m[32m      setBuscandoCep(false)[m
+[32m+[m[32m      return[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    const controller = new AbortController()[m
+[32m+[m
+[32m+[m[32m    setCepsEncontrados([])[m
+[32m+[m[32m    setStatusCep('')[m
+[32m+[m
+[32m+[m[32m    const temporizador = setTimeout(async () => {[m
+[32m+[m[32m      setBuscandoCep(true)[m
+[32m+[m[32m      setStatusCep('Consultando CEP...')[m
+[32m+[m
+[32m+[m[32m      try {[m
+[32m+[m[32m        const url =[m
+[32m+[m[32m          `https://viacep.com.br/ws/` +[m
+[32m+[m[32m          `${estado}/${encodeURIComponent(cidade)}/` +[m
+[32m+[m[32m          `${encodeURIComponent(rua.trim())}/json/`[m
+[32m+[m
+[32m+[m[32m        const resposta = await fetch(url, {[m
+[32m+[m[32m          signal: controller.signal,[m
+[32m+[m[32m        })[m
+[32m+[m
+[32m+[m[32m        if (!resposta.ok) {[m
+[32m+[m[32m          throw new Error('Erro ao consultar CEP.')[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        const dados: ViaCepResposta[] | { erro?: boolean } =[m
+[32m+[m[32m          await resposta.json()[m
+[32m+[m
+[32m+[m[32m        if (!Array.isArray(dados)) {[m
+[32m+[m[32m          setCepsEncontrados([])[m
+[32m+[m[32m          setStatusCep('Nenhum CEP encontrado para esse endereço.')[m
+[32m+[m[32m          return[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        const resultados: CepOpcao[] = dados[m
+[32m+[m[32m          .filter([m
+[32m+[m[32m            ([m
+[32m+[m[32m              item[m
+[32m+[m[32m            ): item is ViaCepResposta & { cep: string } =>[m
+[32m+[m[32m              typeof item.cep === 'string' && item.cep.length > 0[m
+[32m+[m[32m          )[m
+[32m+[m[32m          .map((item) => ({[m
+[32m+[m[32m            cep: item.cep,[m
+[32m+[m[32m            logradouro: item.logradouro || '',[m
+[32m+[m[32m            bairro: item.bairro || '',[m
+[32m+[m[32m            complemento: item.complemento || '',[m
+[32m+[m[32m          }))[m
+[32m+[m
+[32m+[m[32m        setCepsEncontrados(resultados)[m
+[32m+[m
+[32m+[m[32m        if (resultados.length === 0) {[m
+[32m+[m[32m          setStatusCep([m
+[32m+[m[32m            'Nenhum CEP encontrado. Você pode informar o CEP manualmente.'[m
+[32m+[m[32m          )[m
+[32m+[m[32m          return[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        if (resultados.length === 1) {[m
+[32m+[m[32m          setCep((atual) => atual || resultados[0].cep)[m
+[32m+[m
+[32m+[m[32m          if (resultados[0].bairro) {[m
+[32m+[m[32m            setBairro((atual) => atual || resultados[0].bairro)[m
+[32m+[m[32m          }[m
+[32m+[m
+[32m+[m[32m          setStatusCep('CEP encontrado automaticamente!')[m
+[32m+[m[32m          return[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        setStatusCep([m
+[32m+[m[32m          'Encontramos mais de um CEP. Selecione o correto abaixo.'[m
+         )[m
+[31m-        return[m
+[32m+[m[32m      } catch (error) {[m
+[32m+[m[32m        if (!controller.signal.aborted) {[m
+[32m+[m[32m          console.error('Erro ao buscar CEP:', error)[m
+[32m+[m[32m          setStatusCep([m
+[32m+[m[32m            'Não foi possível consultar o CEP. Você pode preenchê-lo manualmente.'[m
+[32m+[m[32m          )[m
+[32m+[m[32m        }[m
+[32m+[m[32m      } finally {[m
+[32m+[m[32m        if (!controller.signal.aborted) {[m
+[32m+[m[32m          setBuscandoCep(false)[m
+[32m+[m[32m        }[m
+       }[m
+[32m+[m[32m    }, 700)[m
+ [m
+[31m-      const { data: customer, error: customerError } = await supabase[m
+[32m+[m[32m    return () => {[m
+[32m+[m[32m      clearTimeout(temporizador)[m
+[32m+[m[32m      controller.abort()[m
+[32m+[m[32m    }[m
+[32m+[m[32m  }, [rua, cidade, estado, modoCadastro])[m
+[32m+[m
+[32m+[m[41m  [m
+[32m+[m[32masync function entrar(e: FormEvent<HTMLFormElement>) {[m
+[32m+[m[32m  e.preventDefault()[m
+[32m+[m[32m  setErro('')[m
+[32m+[m[32m  setSucesso('')[m
+[32m+[m[32m  setCarregando(true)[m
+[32m+[m[32m  setMostrarEscolhaAcesso(false)[m
+[32m+[m
+[32m+[m[32m  try {[m
+[32m+[m[32m    const { data, error } = await supabase.auth.signInWithPassword({[m
+[32m+[m[32m      email: email.trim().toLowerCase(),[m
+[32m+[m[32m      password: senha,[m
+[32m+[m[32m    })[m
+[32m+[m
+[32m+[m[32m    if (error) {[m
+[32m+[m[32m      console.error('Erro de autenticação:', error)[m
+[32m+[m[32m      setErro([m
+[32m+[m[32m        'E-mail ou senha incorretos. Verifique também se confirmou seu e-mail.'[m
+[32m+[m[32m      )[m
+[32m+[m[32m      return[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    if (!data.user) {[m
+[32m+[m[32m      setErro('Não foi possível identificar o usuário.')[m
+[32m+[m[32m      return[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    const userId = data.user.id[m
+[32m+[m
+[32m+[m[32m    con

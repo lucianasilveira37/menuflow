@@ -36,6 +36,17 @@ type OperatingDay = {
   closing_time: string
 }
 
+type IBGEState = {
+  id: number
+  nome: string
+  sigla: string
+}
+
+type IBGECity = {
+  id: number
+  nome: string
+}
+
 const weekDays = [
   'Domingo',
   'Segunda-feira',
@@ -61,6 +72,14 @@ const inputClass =
 const cardClass =
   'mb-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6'
 
+const defaultSchedule = (): OperatingDay[] =>
+  weekDays.map((_, weekday) => ({
+    weekday,
+    is_closed: true,
+    opening_time: '18:00',
+    closing_time: '23:00',
+  }))
+
 function formatCurrency(value: number) {
   return Number(value).toLocaleString('pt-BR', {
     style: 'currency',
@@ -82,19 +101,19 @@ export default function MinhaLojaPage() {
     state: '',
   })
 
-  const [schedule, setSchedule] = useState<OperatingDay[]>(
-    weekDays.map((_, weekday) => ({
-      weekday,
-      is_closed: true,
-      opening_time: '18:00',
-      closing_time: '23:00',
-    }))
-  )
+  // IBGE
+  const [states, setStates] = useState<IBGEState[]>([])
+  const [cities, setCities] = useState<IBGECity[]>([])
+  const [loadingStates, setLoadingStates] = useState(false)
+  const [loadingCities, setLoadingCities] = useState(false)
 
+  // Funcionamento
+  const [schedule, setSchedule] = useState<OperatingDay[]>(defaultSchedule())
   const [savingSchedule, setSavingSchedule] = useState(false)
   const [effectiveOpen, setEffectiveOpen] = useState(false)
   const [checkingOpen, setCheckingOpen] = useState(false)
 
+  // Bairros
   const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([])
   const [neighborhoodName, setNeighborhoodName] = useState('')
   const [neighborhoodFee, setNeighborhoodFee] = useState('')
@@ -102,14 +121,125 @@ export default function MinhaLojaPage() {
   const [savingNeighborhood, setSavingNeighborhood] = useState(false)
   const [loadingNeighborhoods, setLoadingNeighborhoods] = useState(false)
 
+  // Entrega
   const [deliveryMode, setDeliveryMode] = useState<'simple' | 'gps'>('simple')
   const [savingDeliveryMode, setSavingDeliveryMode] = useState(false)
 
+  // Geral
   const [logoFile, setLogoFile] = useState<File | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+
+  // ==========================================
+  // IBGE - CARREGAR ESTADOS
+  // ==========================================
+
+  useEffect(() => {
+    let active = true
+
+    async function loadStates() {
+      setLoadingStates(true)
+
+      try {
+        const response = await fetch(
+          'https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome'
+        )
+
+        if (!response.ok) {
+          throw new Error('Erro ao carregar estados.')
+        }
+
+        const data: IBGEState[] = await response.json()
+
+        if (active) {
+          setStates(data)
+        }
+      } catch {
+        if (active) {
+          setError('Não foi possível carregar os estados. Verifique sua conexão.')
+        }
+      } finally {
+        if (active) {
+          setLoadingStates(false)
+        }
+      }
+    }
+
+    loadStates()
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // ==========================================
+  // IBGE - CARREGAR CIDADES DO ESTADO
+  // ==========================================
+
+  useEffect(() => {
+    let active = true
+
+    async function loadCities() {
+      setCities([])
+
+      if (!form.state) {
+        setLoadingCities(false)
+        return
+      }
+
+      // Esperar os estados serem carregados
+      if (states.length === 0) {
+        return
+      }
+
+      const selectedState = states.find(
+        state => state.sigla === form.state
+      )
+
+      if (!selectedState) {
+        setLoadingCities(false)
+        return
+      }
+
+      setLoadingCities(true)
+
+      try {
+        const response = await fetch(
+          `https://servicodados.ibge.gov.br/api/v1/localidades/estados/${selectedState.id}/municipios?orderBy=nome`
+        )
+
+        if (!response.ok) {
+          throw new Error('Erro ao carregar cidades.')
+        }
+
+        const data: IBGECity[] = await response.json()
+
+        if (active) {
+          setCities(data)
+        }
+      } catch {
+        if (active) {
+          setError('Não foi possível carregar as cidades. Tente novamente.')
+        }
+      } finally {
+        if (active) {
+          setLoadingCities(false)
+        }
+      }
+    }
+
+    loadCities()
+
+    return () => {
+      active = false
+    }
+  }, [form.state, states])
+
+  // ==========================================
+  // CARREGAR RESTAURANTE
+  // ==========================================
 
   useEffect(() => {
     loadRestaurant()
@@ -165,6 +295,7 @@ export default function MinhaLojaPage() {
     setRestaurant(shop)
     setDeliveryMode(shop.delivery_validation_mode || 'simple')
 
+    // Recuperar os dados salvos no Supabase
     setForm({
       name: shop.name || '',
       slug: shop.slug || '',
@@ -172,7 +303,7 @@ export default function MinhaLojaPage() {
       phone: shop.phone || '',
       address: shop.address || '',
       city: shop.city || '',
-      state: shop.state || '',
+      state: (shop.state || '').toUpperCase(),
     })
 
     await Promise.all([
@@ -183,6 +314,10 @@ export default function MinhaLojaPage() {
 
     setLoading(false)
   }
+
+  // ==========================================
+  // HORÁRIOS DE FUNCIONAMENTO
+  // ==========================================
 
   async function loadOperatingHours(id: string) {
     const { data, error: loadError } = await supabase
@@ -236,11 +371,12 @@ export default function MinhaLojaPage() {
 
     if (!restaurantId) return
 
-    const invalid = schedule.some(day =>
-      !day.is_closed &&
-      (!day.opening_time ||
-        !day.closing_time ||
-        day.opening_time >= day.closing_time)
+    const invalid = schedule.some(
+      day =>
+        !day.is_closed &&
+        (!day.opening_time ||
+          !day.closing_time ||
+          day.opening_time >= day.closing_time)
     )
 
     if (invalid) {
@@ -282,12 +418,14 @@ export default function MinhaLojaPage() {
   ) {
     setSchedule(current =>
       current.map(day =>
-        day.weekday === weekday
-          ? { ...day, ...changes }
-          : day
+        day.weekday === weekday ? { ...day, ...changes } : day
       )
     )
   }
+
+  // ==========================================
+  // CONTROLE MANUAL DA LOJA
+  // ==========================================
 
   async function setManualOverride(value: boolean | null) {
     if (!restaurant) return
@@ -318,6 +456,10 @@ export default function MinhaLojaPage() {
     )
   }
 
+  // ==========================================
+  // MODO DE ENTREGA
+  // ==========================================
+
   async function saveDeliveryMode() {
     if (!restaurantId) return
 
@@ -345,6 +487,10 @@ export default function MinhaLojaPage() {
     setMessage('Modo de entrega atualizado com sucesso!')
     setSavingDeliveryMode(false)
   }
+
+  // ==========================================
+  // BAIRROS
+  // ==========================================
 
   async function loadNeighborhoods(id: string) {
     setLoadingNeighborhoods(true)
@@ -379,6 +525,10 @@ export default function MinhaLojaPage() {
       return null
     }
   }
+
+  // ==========================================
+  // UPLOAD DO LOGOTIPO
+  // ==========================================
 
   async function uploadLogo(file: File) {
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
@@ -422,6 +572,10 @@ export default function MinhaLojaPage() {
     return data.publicUrl
   }
 
+  // ==========================================
+  // SALVAR INFORMAÇÕES DA LOJA
+  // ==========================================
+
   async function saveShop(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
@@ -429,6 +583,21 @@ export default function MinhaLojaPage() {
 
     if (!form.name.trim() || !form.slug.trim()) {
       setError('Preencha o nome e o endereço público da loja.')
+      return
+    }
+
+    if (!form.state || !form.city) {
+      setError('Selecione o estado e a cidade da loja.')
+      return
+    }
+
+    if (!states.some(state => state.sigla === form.state)) {
+      setError('Selecione um estado válido.')
+      return
+    }
+
+    if (!cities.some(city => city.nome === form.city)) {
+      setError('Selecione uma cidade válida para o estado escolhido.')
       return
     }
 
@@ -454,8 +623,8 @@ export default function MinhaLojaPage() {
           description: form.description.trim() || null,
           phone: form.phone.trim() || null,
           address: form.address.trim() || null,
-          city: form.city.trim() || null,
-          state: form.state.trim().toUpperCase() || null,
+          city: form.city.trim(),
+          state: form.state.trim().toUpperCase(),
           logo_url: logoUrl,
         })
         .eq('id', restaurantId)
@@ -482,8 +651,8 @@ export default function MinhaLojaPage() {
         }
       }
 
-      setMessage('Dados da loja atualizados com sucesso!')
       setLogoFile(null)
+      setMessage('Dados da loja atualizados com sucesso!')
 
       await loadRestaurant()
     } catch (err) {
@@ -492,10 +661,14 @@ export default function MinhaLojaPage() {
           ? err.message
           : 'Ocorreu um erro ao salvar.'
       )
+    } finally {
+      setSaving(false)
     }
-
-    setSaving(false)
   }
+
+  // ==========================================
+  // SALVAR BAIRRO
+  // ==========================================
 
   async function saveNeighborhood(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -549,12 +722,14 @@ export default function MinhaLojaPage() {
       return
     }
 
+    const wasEditing = Boolean(editingId)
+
     setNeighborhoodName('')
     setNeighborhoodFee('')
     setEditingId(null)
 
     setMessage(
-      editingId
+      wasEditing
         ? 'Bairro atualizado com sucesso!'
         : 'Bairro cadastrado com sucesso!'
     )
@@ -620,13 +795,25 @@ export default function MinhaLojaPage() {
       return
     }
 
-    if (editingId === item.id) cancelEdit()
+    if (editingId === item.id) {
+      cancelEdit()
+    }
 
     setMessage('Bairro excluído com sucesso!')
     await loadNeighborhoods(restaurantId)
   }
 
-  const activeNeighborhoods = neighborhoods.filter(item => item.is_active).length
+  // ==========================================
+  // RESUMO
+  // ==========================================
+
+  const activeNeighborhoods = neighborhoods.filter(
+    item => item.is_active
+  ).length
+
+  // ==========================================
+  // CARREGAMENTO
+  // ==========================================
 
   if (loading) {
     return (
@@ -643,6 +830,7 @@ export default function MinhaLojaPage() {
           <p className="font-semibold text-red-700">
             {error || 'Restaurante não encontrado.'}
           </p>
+
           <button
             onClick={loadRestaurant}
             className="mt-5 rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white"
@@ -654,6 +842,10 @@ export default function MinhaLojaPage() {
     )
   }
 
+  // ==========================================
+  // TELA PRINCIPAL
+  // ==========================================
+
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-800 md:flex">
 
@@ -663,6 +855,7 @@ export default function MinhaLojaPage() {
           <h1 className="text-2xl font-bold tracking-tight">
             Menu<span className="text-blue-400">Flow</span>
           </h1>
+
           <p className="mt-1 text-xs text-slate-400">
             Painel do restaurante
           </p>
@@ -706,9 +899,11 @@ export default function MinhaLojaPage() {
             <p className="text-sm text-slate-500">
               MenuFlow / Gerenciamento
             </p>
+
             <h2 className="mt-1 text-2xl font-bold">
               Minha loja
             </h2>
+
             <p className="mt-1 text-sm text-slate-500">
               Gerencie as informações e o funcionamento do seu restaurante.
             </p>
@@ -726,6 +921,7 @@ export default function MinhaLojaPage() {
                 restaurant.name.charAt(0).toUpperCase()
               )}
             </div>
+
             <div>
               <p className="text-sm font-semibold">{restaurant.name}</p>
               <p className="text-xs text-slate-500">Configurações da loja</p>
@@ -738,7 +934,9 @@ export default function MinhaLojaPage() {
           <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
             <span>⚠</span>
             <p className="flex-1">{error}</p>
-            <button onClick={() => setError('')} className="font-bold">×</button>
+            <button onClick={() => setError('')} className="font-bold">
+              ×
+            </button>
           </div>
         )}
 
@@ -746,7 +944,9 @@ export default function MinhaLojaPage() {
           <div className="mb-5 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">
             <span>✓</span>
             <p className="flex-1">{message}</p>
-            <button onClick={() => setMessage('')} className="font-bold">×</button>
+            <button onClick={() => setMessage('')} className="font-bold">
+              ×
+            </button>
           </div>
         )}
 
@@ -754,15 +954,29 @@ export default function MinhaLojaPage() {
         <section className="mb-8 grid gap-4 sm:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">Funcionamento atual</p>
-            <p className={`mt-3 text-xl font-bold ${effectiveOpen ? 'text-emerald-600' : 'text-red-600'}`}>
-              {checkingOpen ? 'Consultando...' : effectiveOpen ? 'Aberta' : 'Fechada'}
+
+            <p className={`mt-3 text-xl font-bold ${
+              effectiveOpen ? 'text-emerald-600' : 'text-red-600'
+            }`}>
+              {checkingOpen
+                ? 'Consultando...'
+                : effectiveOpen
+                  ? 'Aberta'
+                  : 'Fechada'}
             </p>
-            <p className="mt-1 text-xs text-slate-400">Situação da loja</p>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Situação da loja
+            </p>
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">Bairros cadastrados</p>
-            <p className="mt-3 text-3xl font-bold">{neighborhoods.length}</p>
+
+            <p className="mt-3 text-3xl font-bold">
+              {neighborhoods.length}
+            </p>
+
             <p className="mt-1 text-xs text-slate-400">
               {activeNeighborhoods} bairros ativos
             </p>
@@ -770,10 +984,14 @@ export default function MinhaLojaPage() {
 
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm text-slate-500">Modo de entrega</p>
+
             <p className="mt-3 text-xl font-bold">
               {deliveryMode === 'gps' ? 'Bairro + GPS' : 'Por bairro'}
             </p>
-            <p className="mt-1 text-xs text-slate-400">Validação de entrega</p>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Validação de entrega
+            </p>
           </div>
         </section>
 
@@ -783,8 +1001,10 @@ export default function MinhaLojaPage() {
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-xl text-blue-700">
               ◷
             </div>
+
             <div>
               <h3 className="text-lg font-bold">Funcionamento da loja</h3>
+
               <p className="mt-1 text-sm text-slate-500">
                 Controle a abertura e configure seus horários semanais.
               </p>
@@ -796,13 +1016,16 @@ export default function MinhaLojaPage() {
               ? 'border-emerald-200 bg-emerald-50'
               : 'border-red-200 bg-red-50'
           }`}>
-            <p className={`font-bold ${effectiveOpen ? 'text-emerald-700' : 'text-red-700'}`}>
+            <p className={`font-bold ${
+              effectiveOpen ? 'text-emerald-700' : 'text-red-700'
+            }`}>
               {checkingOpen
                 ? 'Consultando funcionamento...'
                 : effectiveOpen
                   ? '● Loja aberta agora'
                   : '● Loja fechada agora'}
             </p>
+
             <p className="mt-1 text-xs text-slate-600">
               {restaurant.manual_override === null
                 ? 'Modo automático: os horários cadastrados controlam a abertura.'
@@ -820,6 +1043,7 @@ export default function MinhaLojaPage() {
             >
               Abrir manualmente
             </button>
+
             <button
               type="button"
               onClick={() => setManualOverride(false)}
@@ -827,6 +1051,7 @@ export default function MinhaLojaPage() {
             >
               Fechar manualmente
             </button>
+
             <button
               type="button"
               onClick={() => setManualOverride(null)}
@@ -838,6 +1063,7 @@ export default function MinhaLojaPage() {
 
           <div className="mb-5 border-t border-slate-100 pt-6">
             <h4 className="font-bold">Horários semanais</h4>
+
             <p className="mt-1 text-sm text-slate-500">
               Configure os horários de abertura e fechamento de cada dia.
             </p>
@@ -850,10 +1076,13 @@ export default function MinhaLojaPage() {
                   key={day.weekday}
                   className="grid items-center gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-[minmax(130px,1fr)_1fr_1fr_auto]"
                 >
-                  <strong className="text-sm">{weekDays[day.weekday]}</strong>
+                  <strong className="text-sm">
+                    {weekDays[day.weekday]}
+                  </strong>
 
                   <label className="text-xs text-slate-500">
                     Abertura
+
                     <input
                       type="time"
                       value={day.opening_time.slice(0, 5)}
@@ -869,6 +1098,7 @@ export default function MinhaLojaPage() {
 
                   <label className="text-xs text-slate-500">
                     Fechamento
+
                     <input
                       type="time"
                       value={day.closing_time.slice(0, 5)}
@@ -915,8 +1145,12 @@ export default function MinhaLojaPage() {
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-xl text-violet-700">
               🏪
             </div>
+
             <div>
-              <h3 className="text-lg font-bold">Informações do restaurante</h3>
+              <h3 className="text-lg font-bold">
+                Informações do restaurante
+              </h3>
+
               <p className="mt-1 text-sm text-slate-500">
                 Esses dados serão utilizados na apresentação pública da sua loja.
               </p>
@@ -924,98 +1158,177 @@ export default function MinhaLojaPage() {
           </div>
 
           <form onSubmit={saveShop} className="grid gap-5 md:grid-cols-2">
+
             <label className="text-sm font-medium">
               Nome do restaurante
+
               <input
                 className={inputClass}
                 value={form.name}
-                onChange={e => setForm({ ...form, name: e.target.value })}
+                onChange={e =>
+                  setForm(current => ({
+                    ...current,
+                    name: e.target.value,
+                  }))
+                }
                 required
               />
             </label>
 
             <label className="text-sm font-medium">
               Endereço público do cardápio (slug)
+
               <input
                 className={inputClass}
                 value={form.slug}
                 onChange={e =>
-                  setForm({
-                    ...form,
+                  setForm(current => ({
+                    ...current,
                     slug: e.target.value
                       .toLowerCase()
                       .replace(/[^a-z0-9-]/g, '-'),
-                  })
+                  }))
                 }
                 required
               />
             </label>
 
-            <label className="text-sm font-medium">
-              Cidade
-              <input
-                className={inputClass}
-                value={form.city}
-                onChange={e => setForm({ ...form, city: e.target.value })}
-                placeholder="Ex.: Jaguaruana"
-                required
-              />
-            </label>
-
+            {/* ESTADO IBGE */}
             <label className="text-sm font-medium">
               Estado (UF)
-              <input
+
+              <select
                 className={inputClass}
                 value={form.state}
-                maxLength={2}
+                disabled={loadingStates}
                 onChange={e =>
-                  setForm({
-                    ...form,
-                    state: e.target.value.toUpperCase().replace(/[^A-Z]/g, ''),
-                  })
+                  setForm(current => ({
+                    ...current,
+                    state: e.target.value,
+                    city: '',
+                  }))
                 }
-                placeholder="Ex.: CE"
                 required
-              />
+              >
+                <option value="">
+                  {loadingStates
+                    ? 'Carregando estados...'
+                    : 'Selecione o estado'}
+                </option>
+
+                {states.map(state => (
+                  <option key={state.id} value={state.sigla}>
+                    {state.nome} ({state.sigla})
+                  </option>
+                ))}
+              </select>
+
+              <span className="mt-1 block text-xs text-slate-400">
+                Lista oficial de estados do IBGE.
+              </span>
+            </label>
+
+            {/* CIDADE IBGE */}
+            <label className="text-sm font-medium">
+              Cidade
+
+              <select
+                className={inputClass}
+                value={form.city}
+                disabled={
+                  !form.state ||
+                  loadingCities ||
+                  cities.length === 0
+                }
+                onChange={e =>
+                  setForm(current => ({
+                    ...current,
+                    city: e.target.value,
+                  }))
+                }
+                required
+              >
+                <option value="">
+                  {!form.state
+                    ? 'Selecione primeiro o estado'
+                    : loadingCities
+                      ? 'Carregando cidades...'
+                      : cities.length === 0
+                        ? 'Nenhuma cidade disponível'
+                        : 'Selecione a cidade'}
+                </option>
+
+                {cities.map(city => (
+                  <option key={city.id} value={city.nome}>
+                    {city.nome}
+                  </option>
+                ))}
+              </select>
+
+              <span className="mt-1 block text-xs text-slate-400">
+                As cidades são carregadas automaticamente conforme o estado.
+              </span>
             </label>
 
             <label className="text-sm font-medium md:col-span-2">
               Descrição
+
               <textarea
                 className={`${inputClass} min-h-24 resize-y`}
                 value={form.description}
-                onChange={e => setForm({ ...form, description: e.target.value })}
+                onChange={e =>
+                  setForm(current => ({
+                    ...current,
+                    description: e.target.value,
+                  }))
+                }
                 placeholder="Conte um pouco sobre seu restaurante..."
               />
             </label>
 
             <label className="text-sm font-medium">
               Telefone / WhatsApp
+
               <input
                 className={inputClass}
                 value={form.phone}
-                onChange={e => setForm({ ...form, phone: e.target.value })}
+                onChange={e =>
+                  setForm(current => ({
+                    ...current,
+                    phone: e.target.value,
+                  }))
+                }
                 placeholder="(88) 99999-9999"
               />
             </label>
 
             <label className="text-sm font-medium">
               Endereço
+
               <textarea
                 className={`${inputClass} min-h-12 resize-y`}
                 value={form.address}
-                onChange={e => setForm({ ...form, address: e.target.value })}
+                onChange={e =>
+                  setForm(current => ({
+                    ...current,
+                    address: e.target.value,
+                  }))
+                }
                 placeholder="Rua, número e bairro"
               />
             </label>
 
+            {/* LOGOTIPO */}
             <div className="md:col-span-2">
               <label className="text-sm font-medium">
                 Logotipo do restaurante
+
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
-                  onChange={e => setLogoFile(e.target.files?.[0] || null)}
+                  onChange={e =>
+                    setLogoFile(e.target.files?.[0] || null)
+                  }
                   className={inputClass}
                 />
               </label>
@@ -1029,6 +1342,7 @@ export default function MinhaLojaPage() {
                   <p className="mb-2 text-xs font-medium text-slate-500">
                     Logotipo atual
                   </p>
+
                   <img
                     src={restaurant.logo_url}
                     alt="Logotipo do restaurante"
@@ -1047,7 +1361,7 @@ export default function MinhaLojaPage() {
             <div className="md:col-span-2">
               <button
                 type="submit"
-                disabled={saving}
+                disabled={saving || loadingStates || loadingCities}
                 className="rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
               >
                 {saving ? 'Salvando...' : 'Salvar alterações'}
@@ -1062,8 +1376,10 @@ export default function MinhaLojaPage() {
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-xl text-emerald-700">
               🚚
             </div>
+
             <div>
               <h3 className="text-lg font-bold">Modo de entrega</h3>
+
               <p className="mt-1 text-sm text-slate-500">
                 Escolha como o sistema validará o endereço do cliente.
               </p>
@@ -1083,8 +1399,10 @@ export default function MinhaLojaPage() {
                 onChange={() => setDeliveryMode('simple')}
                 className="mt-1 accent-blue-600"
               />
+
               <span>
                 <strong className="text-sm">Entrega por bairro</strong>
+
                 <p className="mt-1 text-xs leading-5 text-slate-500">
                   O cliente informa o bairro. O sistema verifica se ele está
                   cadastrado e calcula a taxa de entrega.
@@ -1104,8 +1422,12 @@ export default function MinhaLojaPage() {
                 onChange={() => setDeliveryMode('gps')}
                 className="mt-1 accent-blue-600"
               />
+
               <span>
-                <strong className="text-sm">Entrega por bairro + GPS</strong>
+                <strong className="text-sm">
+                  Entrega por bairro + GPS
+                </strong>
+
                 <p className="mt-1 text-xs leading-5 text-slate-500">
                   Além de conferir o bairro, o sistema verifica a localização
                   do cliente dentro da área de entrega.
@@ -1120,7 +1442,9 @@ export default function MinhaLojaPage() {
             disabled={savingDeliveryMode}
             className="mt-5 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:opacity-50"
           >
-            {savingDeliveryMode ? 'Salvando...' : 'Salvar modo de entrega'}
+            {savingDeliveryMode
+              ? 'Salvando...'
+              : 'Salvar modo de entrega'}
           </button>
         </section>
 
@@ -1130,17 +1454,25 @@ export default function MinhaLojaPage() {
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-amber-50 text-xl text-amber-700">
               📍
             </div>
+
             <div>
-              <h3 className="text-lg font-bold">Taxas de entrega por bairro</h3>
+              <h3 className="text-lg font-bold">
+                Taxas de entrega por bairro
+              </h3>
+
               <p className="mt-1 text-sm text-slate-500">
                 Cadastre as regiões atendidas e defina o valor de cada entrega.
               </p>
             </div>
           </div>
 
-          <form onSubmit={saveNeighborhood} className="grid gap-4 md:grid-cols-2">
+          <form
+            onSubmit={saveNeighborhood}
+            className="grid gap-4 md:grid-cols-2"
+          >
             <label className="text-sm font-medium">
               Nome do bairro
+
               <input
                 className={inputClass}
                 value={neighborhoodName}
@@ -1152,6 +1484,7 @@ export default function MinhaLojaPage() {
 
             <label className="text-sm font-medium">
               Taxa de entrega (R$)
+
               <input
                 className={inputClass}
                 type="number"
@@ -1194,6 +1527,7 @@ export default function MinhaLojaPage() {
               <h4 className="font-bold">
                 Bairros cadastrados
               </h4>
+
               <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
                 {neighborhoods.length} cadastrados
               </span>
@@ -1206,9 +1540,11 @@ export default function MinhaLojaPage() {
             ) : neighborhoods.length === 0 ? (
               <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center">
                 <span className="text-3xl">📍</span>
+
                 <p className="mt-3 font-semibold">
                   Nenhum bairro cadastrado
                 </p>
+
                 <p className="mt-1 text-sm text-slate-500">
                   Adicione os bairros onde seu restaurante realiza entregas.
                 </p>
@@ -1222,11 +1558,15 @@ export default function MinhaLojaPage() {
                   >
                     <div>
                       <p className="font-semibold">{item.name}</p>
+
                       <p className="mt-1 text-lg font-bold text-emerald-600">
                         {formatCurrency(Number(item.delivery_fee))}
                       </p>
+
                       <span className={`text-xs font-medium ${
-                        item.is_active ? 'text-emerald-600' : 'text-red-600'
+                        item.is_active
+                          ? 'text-emerald-600'
+                          : 'text-red-600'
                       }`}>
                         {item.is_active ? '● Ativo' : '● Desativado'}
                       </span>
@@ -1270,10 +1610,14 @@ export default function MinhaLojaPage() {
 
         {/* CARDÁPIO PÚBLICO */}
         <section className="mb-6 rounded-2xl bg-gradient-to-r from-blue-700 to-blue-500 p-6 text-white shadow-sm">
-          <h3 className="text-lg font-bold">Seu cardápio está pronto?</h3>
+          <h3 className="text-lg font-bold">
+            Seu cardápio está pronto?
+          </h3>
+
           <p className="mt-2 text-sm text-blue-100">
             Acesse a página pública do restaurante para conferir como seus clientes visualizam a loja.
           </p>
+
           <a
             href={`/cardapio/${restaurant.slug}`}
             target="_blank"
