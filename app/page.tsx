@@ -2,6 +2,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 
 const cadastroUrl = '/login?cadastro=true'
 
@@ -173,20 +174,21 @@ const whatsappUrl =
 
 export default function Home() {
   return (
-    <main className="min-h-screen overflow-hidden bg-white text-slate-800">
+    <main className="min-h-screen overflow-x-clip bg-white pt-[80px] text-slate-800">
 
       {/* CABEÇALHO */}
-      <header className="sticky top-0 z-50 border-b border-slate-100 bg-white/95 backdrop-blur">
+      <header className="fixed inset-x-0 top-0 z-50 w-full border-b border-slate-100 bg-white/95 backdrop-blur">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
 
-          <Link href="/" className="flex shrink-0 items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-blue-700 to-blue-950 text-2xl font-black text-white shadow-lg">
-              M
-            </div>
-
-            <span className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
-              Menu<span className="text-orange-500">Flow</span>
-            </span>
+          <Link href="/" aria-label="MenuFlow - página inicial" className="flex shrink-0 items-center">
+            <Image
+              src="/menuflow-logo.png"
+              alt="MenuFlow"
+              width={525}
+              height={356}
+              priority
+              className="h-12 w-auto object-contain"
+            />
           </Link>
 
           <nav className="hidden items-center gap-5 text-sm font-semibold text-slate-600 lg:flex">
@@ -874,14 +876,14 @@ export default function Home() {
         <div className="mx-auto grid max-w-7xl gap-12 md:grid-cols-3">
 
           <div>
-            <Link href="/" className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-500 text-xl font-black text-white">
-                M
-              </div>
-
-              <span className="text-2xl font-extrabold">
-                Menu<span className="text-orange-400">Flow</span>
-              </span>
+            <Link href="/" aria-label="MenuFlow - página inicial" className="inline-flex items-center">
+              <Image
+                src="/menuflow-logo.png"
+                alt="MenuFlow"
+                width={525}
+                height={356}
+                className="h-14 w-auto object-contain"
+              />
             </Link>
 
             <p className="mt-5 max-w-sm text-sm leading-7 text-slate-400">
