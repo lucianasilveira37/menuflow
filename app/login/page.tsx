@@ -1293,6 +1293,30 @@ trocarModo('cadastro-cliente')
         }
         style={estiloFormulario}
       >
+        <button
+          type="button"
+          onClick={() => router.push('/')}
+          aria-label="Voltar para a página principal"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 18,
+            padding: '8px 0',
+            border: 'none',
+            background: 'transparent',
+            color: '#16a34a',
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 20, lineHeight: 1 }}>
+            ←
+          </span>
+          Voltar para a página principal
+        </button>
+
         <h1 style={{ fontSize: 30, marginBottom: 8 }}>
           MenuFlow
         </h1>
