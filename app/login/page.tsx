@@ -816,7 +816,8 @@ async function entrar(e: FormEvent<HTMLFormElement>) {
       setTipoEstabelecimento('')
       setDocumento('')
       setTelefone('')
-      setEmail('')
+      // Mantém o e-mail para permitir o reenvio da confirmação.
+      setEmail(email.trim().toLowerCase())
       setCep('')
       setRua('')
       setNumero('')
@@ -1100,6 +1101,48 @@ async function entrar(e: FormEvent<HTMLFormElement>) {
     } catch (error) {
       console.error('Erro ao recuperar senha:', error)
       setErro('Ocorreu um erro. Tente novamente.')
+    } finally {
+      setCarregando(false)
+    }
+  }
+
+  // Reenvia o e-mail de confirmação da conta criada.
+  async function reenviarConfirmacao() {
+    setErro('')
+    setSucesso('')
+
+    const emailNormalizado = email.trim().toLowerCase()
+
+    if (!emailNormalizado) {
+      setErro('Informe o e-mail utilizado no cadastro.')
+      return
+    }
+
+    setCarregando(true)
+
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: emailNormalizado,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+        },
+      })
+
+      if (error) {
+        console.error('Erro ao reenviar confirmação:', error)
+        setErro(
+          'Não foi possível reenviar o e-mail de confirmação. Confira o endereço informado e tente novamente.'
+        )
+        return
+      }
+
+      setSucesso(
+        'Solicitação de reenvio realizada! Verifique sua caixa de entrada e também a pasta de spam.'
+      )
+    } catch (error) {
+      console.error('Erro inesperado ao reenviar confirmação:', error)
+      setErro('Ocorreu um erro ao reenviar o e-mail. Tente novamente.')
     } finally {
       setCarregando(false)
     }
@@ -1891,14 +1934,42 @@ trocarModo('cadastro-cliente')
           </>
         )}
 
-        {modo === 'login' && (
-          <div style={{ textAlign: 'right', marginBottom: 18 }}>
+        {(modo === 'login' || modo === 'cadastro') && (
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              gap: 10,
+              marginBottom: 18,
+            }}
+          >
+            {modo === 'login' && (
+              <button
+                type="button"
+                onClick={() => trocarModo('recuperar')}
+                style={estiloLink}
+              >
+                Esqueci minha senha
+              </button>
+            )}
+
             <button
               type="button"
-              onClick={() => trocarModo('recuperar')}
-              style={estiloLink}
+              onClick={reenviarConfirmacao}
+              disabled={carregando || !email.trim()}
+              style={{
+                ...estiloLink,
+                opacity: carregando || !email.trim() ? 0.6 : 1,
+                cursor:
+                  carregando || !email.trim()
+                    ? 'not-allowed'
+                    : 'pointer',
+              }}
             >
-              Esqueci minha senha
+              {carregando
+                ? 'Aguarde...'
+                : 'Não recebeu o e-mail? Reenviar confirmação'}
             </button>
           </div>
         )}
